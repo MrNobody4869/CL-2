@@ -1,5 +1,5 @@
 # CL-2 Lab Practicals
-## At your own risk. prepare backups. dont be a bitch.
+## At your own risk. have backups. 
 Python code for the two CL-2 lab subjects (Computer Laboratory II, 417526). Every script has run
 instructions at the top, step-by-step comments, and theory + viva notes at the end.
 
