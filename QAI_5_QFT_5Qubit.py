@@ -137,6 +137,57 @@ EXPECTED OUTPUT (real run, AerSimulator, seed_simulator=42)
    which is normal random variation. The exact counts can differ on another machine, but all
    32 outcomes appear, and the second test always gives 10101 with 1000 of 1000 shots.)
 
+OUTPUT GRAPHS EXPLAINED (and circuit diagrams)
+----------------------------------------------
+A. CIRCUIT DIAGRAM 1 - library QFT, decomposed (first printed drawing)
+   - What it is: the QFTGate on 5 qubits opened up into basic gates. Time runs left to right.
+     The drawing is too wide, so it is folded: a line ending in a double arrow mark continues
+     in the next block of lines.
+   - q_0 to q_4 are the five qubit wires. [H] = Hadamard. A filled dot joined by a vertical line
+     to a box P(pi/2) on another wire is a controlled-phase gate (cp): it turns the target by
+     the angle written in the box (pi/2, pi/4, pi/8, pi/16) if the control is 1.
+   - Two small crosses [X] joined by a vertical line = SWAP (exchanges the two qubits).
+   - Pattern: H on q_4, then phase gates from q_3, q_2, q_1, q_0 into q_4 with smaller and
+     smaller angles; then H on q_3 with gates from q_2, q_1, q_0; and so on down to a last H
+     on q_0. At the end swaps reverse the qubit order (q_0 with q_4, q_1 with q_3).
+   - If asked: "QFT = a Hadamard on each qubit plus controlled-phase rotations that halve
+     each time, then swaps. For n qubits that is about n squared gates."
+   - Common misreading: P(pi/2) is not a separate gate on its own wire; it is the target half
+     of a controlled gate whose dot is on the other wire.
+
+B. CIRCUIT DIAGRAM 2 - hand-made QFT (second printed drawing)
+   - Same symbols as diagram 1, built by our own loop (h, cp, swap). It looks the same as
+     diagram 1, because it is the same circuit.
+   - Our result: the Operator check printed "Hand-made QFT equals library QFT: True", so the
+     two circuits give the same matrix.
+   - If asked: "I built the QFT from H, cp and swap myself and np.allclose proved it equals
+     the library gate."
+   - Common misreading: the angles are not random; each one is pi divided by 2 to the power of
+     the distance between the two qubits.
+
+C. FIGURE 1 - histogram of two runs (blue = QFT only, orange = QFT then inverse QFT)
+   - What it plots: the counts of each 5-bit result in 1000 shots. There are 32 possible labels
+     (00000 to 11111) on the x axis.
+   - X axis: the measured 5-bit string. Y axis: Count (number of shots out of 1000). The number
+     above each bar is its exact count.
+   - How to read it: 32 short bars of nearly equal height means "spread evenly over all
+     outcomes" (superposition). One very tall bar means "one sure result".
+   - Our result: the blue bars cover all 32 outcomes, with heights from 19 to 43 (an even
+     spread would be about 31 each). Highest are 01110 (43), 01100 (40), 00101 (40). The
+     orange series has ONE bar at 10101 with 1000 of 1000 shots (the Y axis goes above 1000
+     for this one bar). 10101 is the value we encoded with X gates (X on q0, q2, q4).
+   - If asked: "After QFT alone the input looks like a flat spread; after QFT then inverse QFT
+     the original value 10101 comes back with probability 1, so QFT is reversible."
+   - Common misreading: the blue bars are not noise or an error; a flat spread is the right
+     answer for a basis state after QFT. The uneven heights (19 to 43) are only random shot
+     noise, not a pattern.
+
+Quick checklist before showing the graph to the examiner
+   - Say that blue = QFT only and orange = QFT then inverse QFT.
+   - Point out the one tall orange bar at 10101 = the encoded value 21.
+   - Say the blue bars are flat (about 31 each) because QFT spreads a basis state over all outputs.
+   - Be ready to name H, cp (controlled-phase) and swap in the circuit drawings.
+
 DETAILED THEORY NOTES
 ---------------------
 1. WHAT IS THE QUANTUM FOURIER TRANSFORM (QFT)?

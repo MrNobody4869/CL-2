@@ -144,6 +144,52 @@ EXPECTED OUTPUT (real run, AerSimulator, seed_simulator=42)
    256 each, because Alice's measurement results are random. Exact counts can differ a little
    on another machine.)
 
+OUTPUT GRAPHS EXPLAINED (and circuit diagrams)
+----------------------------------------------
+A. CIRCUIT DIAGRAM (printed as text by qc1.draw, Test 1)
+   - What it is: the teleportation circuit drawn with characters. Time runs from left to right.
+   - Lines: q_0, q_1, q_2 are the three qubit wires. The bottom double line "c: 3/" is the
+     classical register with 3 bits (c0, c1, c2).
+   - Boxes: [X] = bit flip, [H] = Hadamard (makes superposition). A filled dot joined by a
+     vertical line to a box [X] on another wire = CX (CNOT): the dot is the control, the box is
+     the target. Two filled dots joined by a line = CZ (phase flip on q2 if q0 is 1). The
+     vertical line simply passes over q_1 in the cz; it does not touch it.
+   - Dashed vertical lines (barrier) only separate the stages; they do not change the logic.
+   - [M] = measurement. The double vertical line and the number under it (0, 1, 2) show which
+     classical bit receives that result.
+   - Read left to right: X on q_0 (message |1>) | H and CX make the Bell pair on q_1,q_2 | CX
+     and H on q_0 (Alice's Bell measurement) | CX and CZ on q_2 (Bob's corrections) | measure.
+   - If asked: "The circuit has 3 qubits; the first block makes the message, the second block
+     makes the entangled pair, the third block is Alice's measurement basis and the fourth block
+     is Bob's correction."
+   - Common misreading: a dot with no joined box is only one half of a controlled gate, not a
+     gate on its own. Also q_0 is the TOP wire but the LAST (rightmost) bit in the counts.
+
+B. FIGURE 1 - histogram of both tests (one plot with two coloured series)
+   - What it plots: how many times each 3-bit result appeared in 1024 shots, for Test 1 (blue
+     bars, teleport |1>) and Test 2 (orange bars, arbitrary state + undo).
+   - X axis: the bit string "q2 q1 q0" (leftmost bit is Bob's qubit q2). Y axis: Count (number
+     of shots). The number above each bar is its exact count. The legend is at the top right.
+   - How to read it: a tall bar means that result happened often. Here every bar is about the
+     same height (about 256 = 1024/4), so the results are evenly spread over 4 outcomes.
+   - Our result: blue bars sit only on 100, 101, 110, 111 with counts 234, 276, 256, 258. All
+     four start with 1, so Bob's q2 was 1 in 1024 of 1024 shots. Orange bars sit only on 000,
+     001, 010, 011 with counts 257, 269, 264, 234. All start with 0, so Bob's q2 was 0 in 1024
+     of 1024 shots after the undo.
+   - The two right bits (q1, q0) are random because Alice's measurement result is random. That
+     is expected and does not matter, because Bob's correction already fixed his qubit.
+   - If asked: "The left bit never changes: it is always 1 in Test 1 and always 0 in Test 2, so
+     the state of q0 reached q2. The other two bits are random, as they should be."
+   - Common misreading: do not say the blue and orange bars are "different results". The four
+     bars of each colour all prove the same thing: the leftmost bit is fixed. Also do not
+     expect one single tall bar; four equal bars is the correct picture.
+
+Quick checklist before showing the graph to the examiner
+   - Say which bit is which: leftmost = q2 (Bob), rightmost = q0 (Alice's message).
+   - Point out that Test 1 bars all start with 1 and Test 2 bars all start with 0.
+   - Say why four bars appear: q0 and q1 are random, only q2 is fixed.
+   - Be ready to name the gates in the circuit: X, H, CX, CZ and the measurement.
+
 DETAILED THEORY NOTES
 ---------------------
 1. WHAT IS QUANTUM TELEPORTATION?

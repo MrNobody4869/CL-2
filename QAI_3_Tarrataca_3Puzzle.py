@@ -242,6 +242,49 @@ EXPECTED OUTPUT (real run, local AerSimulator, seed 42)
    shots are spread over the 7 wrong sequences. With another seed the stray counts change,
    the winner does not. Exact 0.9453 versus measured 0.9629 differ only by shot noise.)
 
+OUTPUT GRAPHS EXPLAINED (and circuit diagrams for quantum scripts)
+------------------------------------------------------------------
+A. CIRCUIT DIAGRAM (printed as text, the oracle circuit)
+   - What it is: the oracle on 8 qubits. q_0, q_1, q_2 are the rule qubits (rule of step 1, 2,
+     3; 0 = V, 1 = H). q_3 to q_7 are the 5 board qubits that hold the board number.
+   - Symbols: a tall box named "Rule" is the rule gate (a 64 x 64 unitary matrix). The small
+     numbers inside the box (0 to 5) are the gate's own input wires: wire 0 is the rule qubit
+     that controls it, wires 1 to 5 are the board qubits. [ X ] = NOT. [ H ] = Hadamard. A dot
+     joined to a box [ X ] = controlled X. The dots on q_3, q_4, q_5, q_6 with the [ X ] on q_7
+     (between two H boxes) make a multi-controlled Z.
+   - Reading left to right: (1) three Rule boxes, one per step, run the moves on the board
+     register; (2) in the middle, X boxes on q_4 and q_5 and the H - controlled X - H block
+     flip the sign (phase) only if the board equals the goal; (3) three Rule boxes again in
+     reverse order undo the moves so the board register returns to START.
+   - If asked: "The oracle plays the three moves, marks the state if the goal is reached, then
+     plays the moves backwards to clean up."
+   - Misreading to avoid: the oracle does NOT print the answer or measure anything. It only
+     changes the sign of the winning sequence. Grover turns that sign into a high probability.
+
+B. FIGURE 1 - BAR CHART "Grover over rule sequences (top 5 outcomes)"
+   - What it plots: how many of the 1024 shots gave each rule sequence (top 5 outcomes). Each
+     3-letter label is a sequence of moves: H = horizontal move of the blank, V = vertical move.
+   - Axes: x = rule sequence (HHH, HHV, HVH, VHH, VHV, written rotated); y = "Count" (number
+     of shots, out of 1024).
+   - How to read it: a tall bar is a sequence Grover found likely. One very tall bar and tiny
+     others means the search worked. If the search did nothing, all 8 sequences would get
+     about 128 shots each.
+   - Our result: HVH = 986 shots, the other four bars are 7, 7, 6, 6. Measured success 986 / 1024
+     = 0.9629, exact success probability 0.9453 after 2 Grover iterations.
+   - We then replay H V H on the start board and reach the goal (Reaches goal: True).
+   - If asked: "The tall bar at HVH shows amplitude amplification: the winning sequence went
+     from 1/8 probability to about 95 percent in two Grover iterations."
+   - Misreading to avoid: the picture shows only the top 5 of 8 outcomes, so the bars do not
+     add up to 1024 (the other shots are spread over the wrong sequences). Also with N = 8
+     Grover gives no real speed-up over a classical search, it is a teaching demo.
+
+Quick checklist before showing the graph to the examiner
+   - Title: "Grover over rule sequences (top 5 outcomes)". X label: rule sequence. Y label: count.
+   - No legend (one set of bars).
+   - Point at: the tall HVH bar (986) versus the tiny bars (6 or 7), then at the printed
+     board steps that end at the goal 1 2 / 3 _.
+   - Mention the start 2 _ / 1 3 and the two Grover iterations.
+
 DETAILED THEORY NOTES
 ---------------------
 1. WHAT IS A QUANTUM PRODUCTION SYSTEM?

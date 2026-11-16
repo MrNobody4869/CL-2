@@ -199,6 +199,33 @@ EXPECTED OUTPUT (real run, Option A data: BBC_News.csv)
       channel 5, viewer 4
    (One bar chart opens: the top 10 stems. Numbers are for the first tech article.)
 
+OUTPUT GRAPHS EXPLAINED
+-----------------------
+FIGURE 1 - bar chart "Top 10 stems in the tech article"
+   - What it plots: the 10 most frequent word stems of ONE article (the first tech article),
+     after lowercasing, removing punctuation and numbers, removing stop words and stemming.
+   - X axis: Stem (the stemmed word, labels turned 45 degrees). Y axis: Frequency (how many times
+     that stem occurs in this article). All bars are the same blue colour; there is no legend.
+   - How to read it: a tall bar means the stem is used often in the article, so it hints at the
+     topic. Bars are sorted from the tallest on the left to the shortest on the right.
+   - Our result: tv is by far the tallest with 14. Then peopl, us, want, brand have 7 each,
+     record 6, technolog, network, channel 5 each, and viewer 4. The flat groups at 7 and at 5
+     are ties, not mistakes.
+   - Reading the topic: tv, record, network, channel, viewer say that the article is about
+     television and new technology, which matches its category (tech).
+   - If asked: "The bar chart shows the top 10 stems after preprocessing. Stop words are removed
+     first, otherwise words like the and of would be the tallest bars and say nothing."
+   - Common misreading 1: "peopl" and "technolog" are not spelling mistakes; the Porter stemmer
+     cuts word endings, so people becomes peopl and technology becomes technolog.
+   - Common misreading 2: "us" is a stem that may come from us, use or uses; stemming can join
+     different words. Also these counts are for ONE article only, not for the whole dataset.
+
+Quick checklist before showing the graph to the examiner
+   - Say that this is one article only and that the counts are after stop-word removal and stemming.
+   - Point to the tallest bar (tv, 14) and say what topic the top stems suggest.
+   - Be ready to explain why stems look cut (peopl, technolog) and what a stemmer is.
+   - Say the axis names: x = Stem, y = Frequency.
+
 DETAILED THEORY NOTES
 ---------------------
 1. WHAT IS TEXT PREPROCESSING?

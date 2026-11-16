@@ -222,6 +222,43 @@ EXPECTED OUTPUT (real run, Option A data, seed 42)
    it the same model gave accuracy 0.974 and recall 0.9552 (22 spam missed). Run time about 15 s.
    On the full 28,063-email file the same pipeline WITHOUT stemming gave accuracy of about 0.983.
 
+OUTPUT GRAPHS EXPLAINED
+-----------------------
+The script draws ONE figure: the confusion-matrix heatmap (Figure 1, Step 9). There are no other
+plots (the top spam words, the comparison with Logistic Regression and KNN, and the demo e-mails
+are printed as text only).
+
+GRAPH 1 : CONFUSION MATRIX HEATMAP (Figure 1, title "Naive Bayes - confusion matrix")
+- What it plots: a 2 x 2 table of how the 1000 test e-mails were classified by Naive Bayes,
+  drawn as coloured cells with the count written inside each cell.
+- Axes: the vertical axis (Actual) is the TRUE label, ham on the top row and spam on the bottom
+  row. The horizontal axis (Predicted) is the model's answer, ham on the left, spam on the right.
+- Colour: the Blues colour bar on the right maps count to shade. Dark blue = many e-mails, almost
+  white = very few.
+- How to read it: the diagonal (top-left, bottom-right) is correct answers, the off-diagonal
+  cells are mistakes. Top-right = false positive (ham sent to spam). Bottom-left = false
+  negative (spam that got into the inbox).
+- What OUR result shows: top-left 505 (ham kept as ham, TN), top-right 4 (ham wrongly called
+  spam, FP), bottom-left 30 (spam missed, FN), bottom-right 461 (spam caught, TP). So
+  accuracy = (505 + 461) / 1000 = 0.966, precision for spam = 461 / 465 = 0.9914, recall =
+  461 / 491 = 0.9389, specificity = 505 / 509 = 0.9921.
+- The two dark cells are on the diagonal and the two pale cells are the mistakes; the bottom-left
+  cell (30) is the bigger mistake, so the filter is very careful (only 4 good e-mails lost) but
+  lets some spam through.
+- If asked: "Rows are the true class and columns the predicted class; 505 and 461 are correct, 4
+  good mails were blocked and 30 spam mails got through, so precision is high and recall is a
+  little lower."
+- Common misreading: rows are the TRUE labels and columns the PREDICTED ones (do not swap them).
+  A dark cell is only good on the diagonal; dark off-diagonal cells would be bad. The shade
+  depends on the counts, so compare the numbers, not only the colours. The 4 in the top-right
+  is the costly error for a spam filter because it hides a real e-mail.
+
+Quick checklist before showing the graph to the examiner
+- Say first: rows = Actual, columns = Predicted, order ham then spam.
+- Show the diagonal (505, 461) as correct and name the two error cells (4 FP, 30 FN).
+- Quote accuracy 0.966, precision 0.9914, recall 0.9389 and link each to a cell.
+- Be ready for: which error is worse for spam (FP) and why precision matters.
+
 DETAILED THEORY NOTES
 ---------------------
 1. WHAT IS SPAM FILTERING / TEXT CLASSIFICATION?

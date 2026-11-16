@@ -231,6 +231,71 @@ EXPECTED OUTPUT (real run, Option A data)
    and the silhouette bar chart. Cluster numbers can differ on another scipy / sklearn
    version; the groups stay the same.)
 
+OUTPUT GRAPHS EXPLAINED
+-----------------------
+The script draws THREE figures: Figure 1 the dendrogram (Step 8), Figure 2 the set of five
+scatter plots for k = 2 to 6 (Step 9), Figure 3 the silhouette bar chart (Step 10).
+
+GRAPH 1 : DENDROGRAM (Figure 1, title "Dendrogram (ward, last 30 merges)")
+- What it plots: the merge tree of Agglomerative Clustering (ward) on all 8950 customers, cut off
+  to show only the last 30 merges so it is readable.
+- Axes: x = the clusters (each label in brackets is the number of customers inside that
+  cluster, for example (679)). y = "Merge distance", how far apart two clusters were when they
+  were joined. The x order of the leaves has no meaning.
+- Each U shape is one merge: its two legs are the joined clusters and the height of its top bar
+  is the distance. Low bars = very similar groups joined early; high bars = joined late.
+- How to read it: a long vertical line that no merge crosses means two groups are far apart. To
+  pick k, draw a horizontal line through the longest vertical lines and count the lines it
+  cuts.
+- What OUR result shows: the top merge (blue) is at about 62 and the two big branches (orange on
+  the left, green on the right) join at about 33 and 35. Cutting just below 62 gives 2
+  clusters, which matches the best silhouette (k = 2, score 0.421).
+- If asked: "The longest vertical line is the last merge at about 62, so a cut just below it
+  gives 2 clusters, and the silhouette score confirms k = 2."
+- Common misreading: the left-to-right order of leaves means nothing (a branch can be swapped
+  without changing the tree), and closeness along the x axis does not mean similarity; only the
+  height of the join matters. The brackets are customer counts, not cluster numbers.
+
+GRAPH 2 : SCATTER PLOTS FOR k = 2, 3, 4, 5, 6 (Figure 2, a grid of 5 plots, the 6th box is empty)
+- What it plots: the same 8950 customers drawn 5 times, once per k, coloured by the cluster that
+  AgglomerativeClustering(n_clusters=k) gave them.
+- Axes: x = P1 and y = P2, the two PCA components (they keep 0.474 of the information). Each
+  dot is one customer; the colour is the cluster; colours are only labels, they do not rank.
+- How to read the set together: go from k = 2 to k = 6 and watch the big groups split. With
+  k = 2 there is one split (a left and a right half), and each next k cuts one existing group
+  into two, like going down the dendrogram. It is the same tree cut at different heights.
+- What OUR result shows: the cloud is one round blob with no clear gap, so the clusters are
+  neighbouring slices of it and the boundaries touch. That is why silhouette is only
+  0.421 for k = 2 and falls to 0.345 at k = 6.
+- If asked: "Each plot is the same data cut at a different level of the dendrogram; the
+  clusters touch each other, so the structure is weak and a small k is preferred."
+- Common misreading: a colour in one plot is not the same cluster as that colour in another
+  plot (colours are re-assigned for every k). Also the plot is a 2-D view that keeps only
+  47.4 % of the information, so clusters that look touching may be better separated in the
+  full 17 columns.
+
+GRAPH 3 : SILHOUETTE BAR CHART (Figure 3, title "Silhouette per k")
+- What it plots: one bar per number of clusters k = 2 to 6; the height is the silhouette score
+  of that clustering on the PCA data.
+- Axes: x = "Number of clusters", y = "Silhouette score" (from -1 to +1, higher = clusters that
+  are tight and well separated).
+- How to read it: the tallest bar is the best k. A bar near 0 means clusters overlap; a
+  negative bar means many points sit in the wrong cluster.
+- What OUR result shows: k = 2 -> 0.421 (tallest), k = 3 -> 0.400, k = 4 -> 0.385, k = 5 ->
+  0.356, k = 6 -> 0.345. The bars fall steadily, so best k = 2. All are below 0.5, so the
+  clusters are only moderately separated.
+- If asked: "The silhouette is highest, 0.421, at k = 2, so k = 2 is chosen; it agrees with the
+  dendrogram."
+- Common misreading: the bars look similar in height, but the tallest bar does not mean the
+  clusters are perfect (0.421 is only fair). The bar chart also does not say which customers
+  are in which cluster.
+
+Quick checklist before showing the graph to the examiner
+- Dendrogram: say y = merge distance, x order means nothing, count the lines cut by the line.
+- Scatter set: say all five plots use the same points and the colours are not shared between plots.
+- Silhouette: say the tallest bar is the best k (k = 2, 0.421) and it matches the dendrogram cut.
+- Mention the limits: PCA keeps only 47.4 % of the information and the groups touch each other.
+
 DETAILED THEORY NOTES
 ---------------------
 1. WHAT IS AGGLOMERATIVE HIERARCHICAL CLUSTERING?

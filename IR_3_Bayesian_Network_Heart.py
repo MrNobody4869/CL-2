@@ -218,6 +218,37 @@ EXPECTED OUTPUT (real run, Option A data, seed 42)
    (A network picture opens at the end. A pgmpy FutureWarning about StructureScore may print
    on import; it comes from inside pgmpy and is harmless.)
 
+OUTPUT GRAPHS EXPLAINED
+-----------------------
+The script draws ONE figure: the network graph (Figure 1, Step 10).
+
+GRAPH 1 : BAYESIAN NETWORK GRAPH (Figure 1, title "Bayesian network for heart disease")
+- What it plots: the structure (DAG) of the model, not data values. It is the edge list of Step 5.
+- Nodes (light blue circles): one per variable, 14 in total. "condition" sits in the centre; the
+  other 13 sit on a circle around it (shell_layout).
+- Arrows (edges): an arrow A -> B means A is a parent of B, i.e. A directly influences B.
+- Arrows INTO condition (from age, sex, chol, trestbps, fbs): the 5 risk factors. They are the
+  parents of condition, so condition's CPT has 3 x 2 x 3 x 3 x 2 = 108 columns.
+- Arrows OUT of condition (to cp, restecg, thalach, exang, oldpeak, slope, ca, thal): the 8
+  symptoms and test results. Disease is the cause; they are the effects.
+- How to read it: 13 arrows in total (5 in, 8 out). No arrow joins two outer nodes, so given
+  condition the symptoms are independent of each other (fork, d-separation). There is no loop.
+- What OUR result shows: the model passed check_model() (Model valid: True). Using this graph the
+  network gave P(condition=1) = 0.978 for Patient A, 0.02 for Patient B, 0.993 for Patient C, and
+  test accuracy 0.82 (confusion matrix [[28 5] [6 22]]).
+- If asked: "The arrows show cause to effect: risk factors cause disease and disease causes the
+  symptoms; with the CPTs on these nodes we run Variable Elimination backwards from symptoms to
+  the disease."
+- Common misreading: the picture has NO numbers and no axes. Arrow length and node position mean
+  nothing (shell_layout just spreads nodes), and an arrow shows direct influence in the model,
+  not a proven medical cause. The probabilities are in the CPDs, not in the graph.
+
+Quick checklist before showing the graph to the examiner
+- Point to condition in the centre, then show the 5 incoming arrows and the 8 outgoing arrows.
+- Say: nodes = variables, arrows = parent to child, each node has a CPT, and there is no cycle.
+- Be ready for: why is this a DAG, what is d-separation, why are there no numbers on the arrows.
+- Mention the figure is only the structure; the learned numbers are printed as CPDs.
+
 DETAILED THEORY NOTES
 ---------------------
 1. WHAT IS A BAYESIAN NETWORK?

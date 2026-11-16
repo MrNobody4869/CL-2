@@ -209,6 +209,69 @@ EXPECTED OUTPUT (real run, shots = 4000, seed_simulator = 42)
    vs 0.0003, are sampling noise: 4000 shots give an error of about 0.5 to 1 percentage point
    on a rate near 0.5 and much less on small rates.)
 
+OUTPUT GRAPHS EXPLAINED (and circuit diagrams for quantum scripts)
+------------------------------------------------------------------
+A. CIRCUIT DIAGRAM (printed as text, the 5-qubit repetition code)
+   - What it is: the protected circuit. q_0, q_1, q_2 are the three data qubits, q_3 and q_4
+     are the two ancilla (syndrome) qubits. The last row "c: 1/" is one classical bit.
+   - Symbols: [ X ] = bit flip (NOT). A dot joined by a vertical line to a box [ X ] on another
+     wire = CNOT (the dot is the control, the box is the target). Two dots joined to one [ X ]
+     = Toffoli (ccx), it flips the target only if BOTH controls are 1. [ I ] = identity gate,
+     it does nothing in theory but it is the place where our noise (X error with probability p)
+     acts. [M] = measurement of q_0 into the classical bit.
+   - Reading left to right: (1) X on q_0 makes |1>; (2) two CNOTs from q_0 copy it to q_1 and q_2
+     (|111>); (3) three [ I ] boxes = the noisy channel on each data qubit; (4) four CNOTs into
+     q_3 and q_4 compute the two parity checks (the syndrome); (5) three Toffoli gates (with X
+     boxes around one control to test for 0) flip back the qubit the syndrome points at;
+     (6) measure q_0.
+   - If asked: "The ancilla qubits tell us WHICH qubit flipped without measuring the data, and
+     the Toffoli gates flip it back."
+   - Misreading to avoid: the [ I ] boxes are not errors by themselves, they are just markers
+     where the noise model is attached.
+
+B. FIGURE 1 - LINE PLOT "Bit-flip repetition code"
+   - What it plots: logical error rate (how often we read the wrong bit) against the physical
+     error probability p, for three curves.
+   - Axes: x = "Physical error probability p" (0.01 to 0.5); y = "Logical error rate" (a
+     fraction from 0 to 0.5, no units). Legend: red circles = Unprotected, blue squares =
+     3-qubit code (simulated), green dashed = Theory 3p^2 - 2p^3.
+   - How to read it: a curve BELOW another is better (fewer errors). The red line is almost a
+     straight line (error rate = p). The blue line bends below it, so the code helps. Where
+     the lines meet, the code stops helping.
+   - Our result: at p = 0.10 unprotected 0.0932, protected 0.0238 (theory 0.0280). At p = 0.01
+     unprotected 0.0107, protected 0.0008. At p = 0.30: 0.2928 vs 0.2175. At p = 0.50 both
+     are about 0.5 (0.4955 and 0.5040), so the lines meet.
+   - The blue (simulated) line sits on the green dashed theory line, which confirms the maths.
+   - If asked: "Protected is better than unprotected for every p below 0.5 because the code only
+     fails when two or more qubits flip, which has probability 3p^2 - 2p^3, smaller than p."
+   - Misreading to avoid: the code is NOT perfect and does not remove errors completely. At
+     p = 0.5 it gives no gain. The tiny gap between blue and green is sampling noise (4000
+     shots), not a mistake.
+
+C. FIGURE 2 - HISTOGRAM "Original vs Mitigated" (readout error demo)
+   - What it plots: results of the 3-qubit GHZ circuit with a noisy readout, before (Original)
+     and after (Mitigated) fixing the readout error with the calibration matrix.
+   - Axes: x = the 3-bit outcomes 000, 001, ... 111 (written rotated); y = "Quasi-probability"
+     (fraction of shots; the numbers on top of the bars are the exact values). Legend: blue =
+     Original, orange = Mitigated.
+   - How to read it: a perfect GHZ circuit has only two tall bars, 000 and 111, about 0.5 each,
+     and all other bars empty. Any bar on the other six outcomes is an error.
+   - Our result: Original has 000 = 0.423 and 111 = 0.375 plus many small bars of 0.02 to 0.04.
+     Mitigated has 000 = 0.488 and 111 = 0.505 and the small bars almost vanish (0.001 to 0.003).
+     P(000)+P(111) rises from 0.798 to 0.993.
+   - If asked: "Readout mitigation measures how the device misreads each basis state, builds
+     a matrix, and inverts it, so the tall bars grow back and the wrong bars shrink."
+   - Misreading to avoid: this fixes only measurement errors, not gate errors or bit flips in
+     the circuit. Some mitigated bars (like 010, 101, 110) are missing because they were
+     clipped to zero, this is not a bug.
+
+Quick checklist before showing the graph to the examiner
+   - Figure 1: title "Bit-flip repetition code", x = physical error probability p, y = logical
+     error rate, legend with three curves. Point at red above blue at p = 0.1, and the meeting
+     at p = 0.5.
+   - Figure 2: legend Original / Mitigated, y = quasi-probability. Point at the two tall bars
+     000 and 111 and the small wrong bars that shrink.
+
 DETAILED THEORY NOTES
 ---------------------
 1. WHAT IS QUANTUM ERROR CORRECTION (AND NOISE)?
