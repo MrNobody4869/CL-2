@@ -34,6 +34,7 @@ url = "https://raw.githubusercontent.com/MrNobody4869/datasets/main/BBC_News.csv
 df = pd.read_csv(url)
 
 # Option B: Load from a local copy kept next to this script
+# Download BBC_News.csv from https://github.com/MrNobody4869/datasets
 # Comment out Option A above and uncomment the line below to switch:
 # df = pd.read_csv("BBC_News.csv")
 print("Data shape:", df.shape)
