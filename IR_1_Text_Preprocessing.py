@@ -3,14 +3,16 @@ Practical 1 : Text Preprocessing with NLTK (BBC News article)
 =============================================================
 INSTRUCTIONS
  1. Install:  pip install pandas matplotlib nltk
-              (the nltk.download lines in Step 1 fetch punkt_tab, stopwords, wordnet and the POS
-              tagger once; this needs internet only the first time)
- 2. Dataset : BBC_News.csv (2225 articles; columns category, text). Option A fetches it online from
-              the datasets repo; Option B reads a local copy - see the two options in Step 2.
+              (the nltk.download lines in Step 1 fetch punkt_tab, stopwords, wordnet
+              and the POS tagger once; this needs internet only the first time)
+ 2. Dataset : BBC_News.csv (2225 articles; columns category, text). Option A fetches
+              it online from the datasets repo; Option B reads a local copy - see the
+              two options in Step 2.
  3. Run     : python IR_1_Text_Preprocessing.py
- 4. Steps   : load -> pick one article -> sentence segmentation -> tokenization -> lowercase ->
-              remove punctuation/numbers -> remove stop words -> stemming vs lemmatization ->
-              POS tagging -> counts at each stage -> top 10 stems bar chart
+ 4. Steps   : load -> pick one article -> sentence segmentation -> tokenization ->
+              lowercase -> remove punctuation/numbers -> remove stop words ->
+              stemming vs lemmatization -> POS tagging -> counts at each stage ->
+              top 10 stems bar chart
 """
 
 # --- Step 1: Import the libraries and download the NLTK data (one time) ---
@@ -96,7 +98,9 @@ for w in ["studies", "running", "better", "companies", "wolves"]:
 
 # --- Step 10: POS tagging (extra) ---
 # Tag each word of the first sentence as noun, verb, adjective, etc.
-print("\nPOS tags of the first sentence (first 10):", nltk.pos_tag(word_tokenize(sentences[0]))[:10])
+first_tokens = word_tokenize(sentences[0])
+tags = nltk.pos_tag(first_tokens)
+print("\nPOS tags of the first sentence (first 10):", tags[:10])
 
 # --- Step 11: Counts at every stage ---
 print("\nTOKEN COUNTS")
@@ -110,9 +114,18 @@ print("After lemmatization :", len(lemmas), "| unique lemmas:", len(set(lemmas))
 # --- Step 12: Top 10 most frequent stems with a bar chart ---
 top10 = Counter(stems).most_common(10)
 print("\nTop 10 stems:", top10)
-plt.bar([s for s, c in top10], [c for s, c in top10], color="steelblue")
-plt.xlabel("Stem"); plt.ylabel("Frequency"); plt.title("Top 10 stems in the tech article")
-plt.xticks(rotation=45); plt.tight_layout(); plt.show()
+names = []
+freqs = []
+for stem, count in top10:
+    names.append(stem)
+    freqs.append(count)
+plt.bar(names, freqs, color="steelblue")
+plt.xlabel("Stem")
+plt.ylabel("Frequency")
+plt.title("Top 10 stems in the tech article")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
 
 
 
@@ -201,30 +214,17 @@ EXPECTED OUTPUT (real run, Option A data: BBC_News.csv)
 
 OUTPUT GRAPHS EXPLAINED
 -----------------------
-FIGURE 1 - bar chart "Top 10 stems in the tech article"
-   - What it plots: the 10 most frequent word stems of ONE article (the first tech article),
-     after lowercasing, removing punctuation and numbers, removing stop words and stemming.
-   - X axis: Stem (the stemmed word, labels turned 45 degrees). Y axis: Frequency (how many times
-     that stem occurs in this article). All bars are the same blue colour; there is no legend.
-   - How to read it: a tall bar means the stem is used often in the article, so it hints at the
-     topic. Bars are sorted from the tallest on the left to the shortest on the right.
-   - Our result: tv is by far the tallest with 14. Then peopl, us, want, brand have 7 each,
-     record 6, technolog, network, channel 5 each, and viewer 4. The flat groups at 7 and at 5
-     are ties, not mistakes.
-   - Reading the topic: tv, record, network, channel, viewer say that the article is about
-     television and new technology, which matches its category (tech).
-   - If asked: "The bar chart shows the top 10 stems after preprocessing. Stop words are removed
-     first, otherwise words like the and of would be the tallest bars and say nothing."
-   - Common misreading 1: "peopl" and "technolog" are not spelling mistakes; the Porter stemmer
-     cuts word endings, so people becomes peopl and technology becomes technolog.
-   - Common misreading 2: "us" is a stem that may come from us, use or uses; stemming can join
-     different words. Also these counts are for ONE article only, not for the whole dataset.
+One output: a bar chart.
 
-Quick checklist before showing the graph to the examiner
-   - Say that this is one article only and that the counts are after stop-word removal and stemming.
-   - Point to the tallest bar (tv, 14) and say what topic the top stems suggest.
-   - Be ready to explain why stems look cut (peopl, technolog) and what a stemmer is.
-   - Say the axis names: x = Stem, y = Frequency.
+FIGURE 1 - bar chart "Top 10 stems in the tech article"
+   - What it plots: the 10 most frequent word stems of ONE article (the first tech article).
+   - X axis: Stem (labels turned 45 degrees). Y axis: Frequency in this article.
+   - All bars are one blue colour, so there is no legend.
+   - Read: tall bar = stem used often, so it hints at the topic; tallest is on the left.
+   - Stop words are removed first; otherwise "the" and "of" would be the tallest bars.
+   - Our result: tv 14, peopl 7, us 7, want 7, brand 7, record 6, then 5s and viewer 4.
+   - If asked: "The chart shows the top 10 stems after preprocessing; tv shows the topic."
+   - Common misreading: "peopl" is not a typo (Porter cuts endings); counts cover ONE article.
 
 DETAILED THEORY NOTES
 ---------------------

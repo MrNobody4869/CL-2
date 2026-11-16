@@ -3,10 +3,12 @@ Practical 3 : Quantum Fourier Transform (5 qubits)
 ==================================================
 INSTRUCTIONS
  1. Install:  pip install qiskit qiskit-aer numpy matplotlib
- 2. Dataset : None needed. Everything runs on qiskit's local AerSimulator (no IBM account/token).
+ 2. Dataset : None needed. Everything runs on qiskit's local AerSimulator
+              (no IBM account/token).
  3. Run     : python QAI_5_QFT_5Qubit.py
- 4. Steps   : encode a value with X gates -> QFT -> measure (spread out) -> QFT then inverse QFT
-              (value comes back) -> build QFT by hand (H, cp, swap) -> compare with library QFT
+ 4. Steps   : encode a value with X gates -> QFT -> measure (spread out) ->
+              QFT then inverse QFT (value comes back) -> build QFT by hand
+              (H, cp, swap) -> compare with library QFT
 """
 
 # --- Step 1: Import the libraries ---
@@ -21,7 +23,8 @@ from qiskit.visualization import plot_histogram
 n = 5
 sim = AerSimulator(seed_simulator=42)
 
-# --- Step 2: Encode a value with X gates (manual: X on q0, q2, q4 gives binary 10101 = 21) ---
+# --- Step 2: Encode a value with X gates ---
+# X on q0, q2 and q4 gives binary 10101 = 21.
 def encode(qc):
     qc.x([0, 2, 4])
 
@@ -30,9 +33,11 @@ qc = QuantumCircuit(n, n)
 encode(qc)
 qc.append(QFTGate(n), range(n))
 qc.measure(range(n), range(n))
-counts_qft = sim.run(transpile(qc, sim), shots=1000).result().get_counts()
+job = sim.run(transpile(qc, sim), shots=1000)
+counts_qft = job.result().get_counts()
 print("QFT only: number of different outcomes =", len(counts_qft), "out of", 2 ** n)
-print("Five most common:", sorted(counts_qft.items(), key=lambda kv: -kv[1])[:5])
+ranked = sorted(counts_qft.items(), key=lambda kv: -kv[1])
+print("Five most common:", ranked[:5])
 
 # --- Step 4: Apply QFT and then inverse QFT; the encoded value must come back ---
 qc2 = QuantumCircuit(n, n)
@@ -40,13 +45,18 @@ encode(qc2)
 qc2.append(QFTGate(n), range(n))
 qc2.append(QFTGate(n).inverse(), range(n))
 qc2.measure(range(n), range(n))
-counts_back = sim.run(transpile(qc2, sim), shots=1000).result().get_counts()
+job2 = sim.run(transpile(qc2, sim), shots=1000)
+counts_back = job2.result().get_counts()
 print("QFT then inverse QFT:", counts_back)
 
-# --- Step 5: Draw the QFT circuit as text (decompose shows the H, cp and swap gates inside) ---
-print(QuantumCircuit(n).compose(QFTGate(n), range(n)).decompose().draw(output="text", fold=120))
+# --- Step 5: Draw the QFT circuit as text ---
+# decompose shows the H, cp and swap gates inside.
+base = QuantumCircuit(n)
+qft_circuit = base.compose(QFTGate(n), range(n))
+print(qft_circuit.decompose().draw(output="text", fold=120))
 
-# --- Step 6: Build the 5-qubit QFT by hand: H, then controlled-phase (cp) gates, then swaps ---
+# --- Step 6: Build the 5-qubit QFT by hand ---
+# H, then controlled-phase (cp) gates, then swaps.
 hand = QuantumCircuit(n)
 for j in range(n - 1, -1, -1):
     hand.h(j)
@@ -63,7 +73,8 @@ print("Hand-made QFT equals library QFT:", same)
 # --- Step 8: Plot the two histograms ---
 # Draw on our own axes (ax=) so the chart also shows inside Jupyter.
 fig, ax = plt.subplots(figsize=(12, 5))
-plot_histogram([counts_qft, counts_back], legend=["QFT only", "QFT then inverse QFT"], ax=ax)
+labels = ["QFT only", "QFT then inverse QFT"]
+plot_histogram([counts_qft, counts_back], legend=labels, ax=ax)
 plt.show()
 
 
@@ -139,54 +150,37 @@ EXPECTED OUTPUT (real run, AerSimulator, seed_simulator=42)
 
 OUTPUT GRAPHS EXPLAINED (and circuit diagrams)
 ----------------------------------------------
-A. CIRCUIT DIAGRAM 1 - library QFT, decomposed (first printed drawing)
-   - What it is: the QFTGate on 5 qubits opened up into basic gates. Time runs left to right.
-     The drawing is too wide, so it is folded: a line ending in a double arrow mark continues
-     in the next block of lines.
-   - q_0 to q_4 are the five qubit wires. [H] = Hadamard. A filled dot joined by a vertical line
-     to a box P(pi/2) on another wire is a controlled-phase gate (cp): it turns the target by
-     the angle written in the box (pi/2, pi/4, pi/8, pi/16) if the control is 1.
-   - Two small crosses [X] joined by a vertical line = SWAP (exchanges the two qubits).
-   - Pattern: H on q_4, then phase gates from q_3, q_2, q_1, q_0 into q_4 with smaller and
-     smaller angles; then H on q_3 with gates from q_2, q_1, q_0; and so on down to a last H
-     on q_0. At the end swaps reverse the qubit order (q_0 with q_4, q_1 with q_3).
-   - If asked: "QFT = a Hadamard on each qubit plus controlled-phase rotations that halve
-     each time, then swaps. For n qubits that is about n squared gates."
-   - Common misreading: P(pi/2) is not a separate gate on its own wire; it is the target half
-     of a controlled gate whose dot is on the other wire.
+Three outputs: two circuit drawings and one histogram.
 
-B. CIRCUIT DIAGRAM 2 - hand-made QFT (second printed drawing)
-   - Same symbols as diagram 1, built by our own loop (h, cp, swap). It looks the same as
-     diagram 1, because it is the same circuit.
-   - Our result: the Operator check printed "Hand-made QFT equals library QFT: True", so the
-     two circuits give the same matrix.
-   - If asked: "I built the QFT from H, cp and swap myself and np.allclose proved it equals
-     the library gate."
-   - Common misreading: the angles are not random; each one is pi divided by 2 to the power of
-     the distance between the two qubits.
+A. CIRCUIT DIAGRAM 1 - library QFT, decomposed (first drawing)
+   - What it shows: QFTGate(5) opened into basic gates; time runs from left to right.
+   - The wide drawing is folded; a double-arrow mark means it continues in the next lines.
+   - Wires q_0 to q_4. [H] = Hadamard; two [X] joined by a line = SWAP.
+   - A dot joined to a box P(pi/2) = controlled phase: turns the target if the control is 1.
+   - Read: H on q_4, then P gates from q_3 down to q_0, then H on q_3, and so on; swaps last.
+   - Our result: H, P(pi/2), P(pi/4), P(pi/8), P(pi/16) and swaps.
+   - If asked: "QFT = H on each qubit plus phase turns that halve each time, then swaps."
+   - Common misreading: P(pi/2) is the target half of a controlled gate, not a lone gate.
 
-C. FIGURE 1 - histogram of two runs (blue = QFT only, orange = QFT then inverse QFT)
-   - What it plots: the counts of each 5-bit result in 1000 shots. There are 32 possible labels
-     (00000 to 11111) on the x axis.
-   - X axis: the measured 5-bit string. Y axis: Count (number of shots out of 1000). The number
-     above each bar is its exact count.
-   - How to read it: 32 short bars of nearly equal height means "spread evenly over all
-     outcomes" (superposition). One very tall bar means "one sure result".
-   - Our result: the blue bars cover all 32 outcomes, with heights from 19 to 43 (an even
-     spread would be about 31 each). Highest are 01110 (43), 01100 (40), 00101 (40). The
-     orange series has ONE bar at 10101 with 1000 of 1000 shots (the Y axis goes above 1000
-     for this one bar). 10101 is the value we encoded with X gates (X on q0, q2, q4).
-   - If asked: "After QFT alone the input looks like a flat spread; after QFT then inverse QFT
-     the original value 10101 comes back with probability 1, so QFT is reversible."
-   - Common misreading: the blue bars are not noise or an error; a flat spread is the right
-     answer for a basis state after QFT. The uneven heights (19 to 43) are only random shot
-     noise, not a pattern.
+B. CIRCUIT DIAGRAM 2 - hand-made QFT (second drawing)
+   - What it shows: the same QFT built by our own loop of h, cp and swap.
+   - Symbols: the same as diagram 1 (H, dot + P box, joined crosses for SWAP).
+   - How to read: compare it with diagram 1 block by block; the gate pattern is the same.
+   - Each angle is pi divided by 2 to the power of the gap between the two qubits.
+   - Operator(hand).data and np.allclose compare the two 32 x 32 matrices.
+   - Our result: Hand-made QFT equals library QFT: True.
+   - If asked: "I built QFT from H, cp and swap, and np.allclose proved it equals the library."
+   - Common misreading: looking alike is not the proof; the matrix check is.
 
-Quick checklist before showing the graph to the examiner
-   - Say that blue = QFT only and orange = QFT then inverse QFT.
-   - Point out the one tall orange bar at 10101 = the encoded value 21.
-   - Say the blue bars are flat (about 31 each) because QFT spreads a basis state over all outputs.
-   - Be ready to name H, cp (controlled-phase) and swap in the circuit drawings.
+C. FIGURE 1 - histogram (blue = QFT only, orange = QFT then inverse QFT)
+   - What it plots: how often each 5-bit result came up in 1000 shots, for two runs.
+   - X axis: the measured 5-bit string (32 labels). Y axis: Count of shots.
+   - The number above each bar is its exact count.
+   - Many short bars of similar height = even spread; one tall bar = one sure result.
+   - Blue is flat as QFT spreads a basis state; orange is one bar as the inverse undoes it.
+   - Our result: QFT only gives 32 of 32 outcomes; QFT then inverse QFT gives {'10101': 1000}.
+   - If asked: "QFT alone gives a flat spread; QFT then inverse QFT returns 10101 for sure."
+   - Common misreading: the uneven blue heights (about 20 to 43) are shot noise, not an error.
 
 DETAILED THEORY NOTES
 ---------------------

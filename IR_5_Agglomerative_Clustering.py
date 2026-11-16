@@ -3,13 +3,15 @@ Practical IR-5 : Agglomerative Hierarchical Clustering on Credit Card Customers
 ===============================================================================
 INSTRUCTIONS
  1. Install:  pip install numpy pandas matplotlib scikit-learn scipy
- 2. Dataset : CC_GENERAL.csv (Kaggle "Credit Card Dataset for Clustering": 8950 cardholders, a
-              CUST_ID column and 17 numeric usage columns). Option A reads it online from the
-              datasets repo; Option B reads a local copy - see the two options in Step 2.
+ 2. Dataset : CC_GENERAL.csv (Kaggle "Credit Card Dataset for Clustering": 8950
+              cardholders, a CUST_ID column and 17 numeric usage columns).
+              Option A reads it online from the datasets repo; Option B reads a
+              local copy - see the two options in Step 2.
  3. Run     : python IR_5_Agglomerative_Clustering.py
- 4. Steps   : load -> drop CUST_ID -> fill nulls (median) -> StandardScaler + normalize -> PCA (2)
-              -> 6-point worked example (merge table) -> dendrogram (ward) -> fit k = 2..6 and
-              plot -> silhouette table + bar chart -> best k -> cluster profile -> compare
+ 4. Steps   : load -> drop CUST_ID -> fill nulls (median) -> StandardScaler +
+              normalize -> PCA (2) -> 6-point worked example (merge table)
+              -> dendrogram (ward) -> fit k = 2..6 and plot -> silhouette table
+              + bar chart -> best k -> cluster profile -> compare
               single / complete / average / ward linkage
 """
 
@@ -35,7 +37,7 @@ print("Data shape:", df.shape)
 print(df.head())
 
 # --- Step 3: Drop the identifier and count the missing values ---
-# CUST_ID is only a name tag for the customer, not a feature, so it must not be clustered.
+# CUST_ID is only a name tag for the customer, not a feature, so do not cluster it.
 df = df.drop(columns="CUST_ID")
 print("\nCUST_ID dropped (an identifier, not a feature). Columns left:", df.shape[1])
 print("Missing values per column (only non-zero shown):")
@@ -43,52 +45,60 @@ nulls = df.isnull().sum()
 print(nulls[nulls > 0])
 
 # --- Step 4: Fill the missing values with the column median ---
-# The manual used fillna(method='ffill') which is removed in new pandas and copies another
-# customer's value; the median of the column is safer and works on current pandas.
+# The manual used fillna(method='ffill') which is removed in new pandas and copies
+# another customer's value; the median of the column is safer and works on current
+# pandas.
 df = df.fillna(df.median())
 print("Missing values after filling:", int(df.isnull().sum().sum()))
 
 # --- Step 5: Scale and normalize ---
-# StandardScaler: the columns have very different units (0-1 up to 76,000), so each column is
-# turned into mean 0 and std 1; otherwise big-valued columns would decide every distance.
+# StandardScaler: the columns have very different units (0-1 up to 76,000), so each
+# column is turned into mean 0 and std 1; otherwise big-valued columns would decide
+# every distance.
 X_scaled = StandardScaler().fit_transform(df)
-# normalize: then each customer (row) is scaled to unit length, so only the spending pattern
-# counts, not how large the numbers are overall (this is the second step in the manual).
+# normalize: then each customer (row) is scaled to unit length, so only the spending
+# pattern counts, not how large the numbers are overall (this is the second step in
+# the manual).
 X_normalized = normalize(X_scaled)
 
 # --- Step 6: PCA down to 2 components ---
-# 17 columns cannot be drawn, so PCA keeps the 2 directions with the most variance. It also
-# makes the dendrogram cheap. The cost: only part of the information is kept.
+# 17 columns cannot be drawn, so PCA keeps the 2 directions with the most variance.
+# It also makes the dendrogram cheap. The cost: only part of the information is kept.
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X_normalized)
-print("\nPCA explained variance ratio:", pca.explained_variance_ratio_.round(3))
-print("Total variance kept by 2 components:", round(pca.explained_variance_ratio_.sum(), 3))
-print("(So about half of the information is lost; the clusters below are clusters of this 2-D view.)")
+variance_ratio = pca.explained_variance_ratio_
+print("\nPCA explained variance ratio:", variance_ratio.round(3))
+print("Total variance kept by 2 components:", round(variance_ratio.sum(), 3))
+print("(So about half of the information is lost; "
+      "the clusters below are clusters of this 2-D view.)")
 
 # --- Step 7: Tiny worked example - the algorithm by hand on 6 real customers ---
-# Start with 6 clusters (one per customer), then repeatedly merge the two closest clusters.
+# Start with 6 clusters (one per customer), then repeatedly merge the two closest.
 small = X_pca[:6]
 print("\nFirst 6 customers (P1, P2):\n", small.round(3))
 merge_table = linkage(small, method="ward")
 print("Merge table: [cluster A, cluster B, distance, size of new cluster]")
 print(merge_table.round(3))
-# Row i of the table creates a new cluster with id 6 + i (ids 0-5 are the single customers).
+# Row i of the table creates a new cluster with id 6 + i (ids 0-5 are single customers).
 
 # --- Step 8: Dendrogram for all customers (ward linkage) ---
-# Ward on 8950 points is fine (about 8950 x 8950 / 2 distances, roughly 320 MB of memory).
+# Ward on 8950 points is fine (about 8950 x 8950 / 2 distances, roughly 320 MB).
 Z = linkage(X_pca, method="ward")
 # Show only the last 30 merges so the picture stays readable.
 plt.figure(figsize=(10, 5))
 dendrogram(Z, truncate_mode="lastp", p=30)
 plt.title("Dendrogram (ward, last 30 merges)")
-plt.xlabel("Cluster (number of customers in brackets)"); plt.ylabel("Merge distance"); plt.show()
+plt.xlabel("Cluster (number of customers in brackets)")
+plt.ylabel("Merge distance")
+plt.show()
 
-# How to read k from the dendrogram, by eye: draw a horizontal line through the longest vertical
-# lines (the ones no merge crosses) and count the vertical lines it cuts. The tallest line is the
-# last merge, so a cut just below it leaves 2 clusters. The silhouette scores in Step 10 confirm k.
+# How to read k from the dendrogram, by eye: draw a horizontal line through the
+# longest vertical lines (the ones no merge crosses) and count the vertical lines it
+# cuts. The tallest line is the last merge, so a cut just below it leaves 2 clusters.
+# The silhouette scores in Step 10 confirm k.
 
 # --- Step 9: Fit Agglomerative Clustering for k = 2 to 6 and plot all in one figure ---
-# Default AgglomerativeClustering uses ward linkage and euclidean distance, as in the manual.
+# Default AgglomerativeClustering uses ward linkage and euclidean distance (manual).
 all_labels = {}
 fig, axes = plt.subplots(2, 3, figsize=(15, 8))
 axes = axes.ravel()
@@ -96,9 +106,11 @@ for i, k in enumerate(range(2, 7)):
     all_labels[k] = AgglomerativeClustering(n_clusters=k).fit_predict(X_pca)
     axes[i].scatter(X_pca[:, 0], X_pca[:, 1], c=all_labels[k], cmap="rainbow", s=5)
     axes[i].set_title(f"k = {k}")
-    axes[i].set_xlabel("P1"); axes[i].set_ylabel("P2")
+    axes[i].set_xlabel("P1")
+    axes[i].set_ylabel("P2")
 axes[5].axis("off")
-plt.tight_layout(); plt.show()
+plt.tight_layout()
+plt.show()
 
 # --- Step 10: Silhouette score for each k, then pick the best k ---
 # Silhouette: higher = better separated clusters (range -1 to +1).
@@ -108,25 +120,38 @@ print("\nSilhouette score for each k (ward):")
 for k, s in zip(ks, scores):
     print(f"  k = {k}   {s:.3f}")
 plt.bar(ks, scores)
-plt.xlabel("Number of clusters"); plt.ylabel("Silhouette score"); plt.title("Silhouette per k"); plt.show()
+plt.xlabel("Number of clusters")
+plt.ylabel("Silhouette score")
+plt.title("Silhouette per k")
+plt.show()
 best_k = ks[int(np.argmax(scores))]
 print("Best k by silhouette:", best_k, "(score", round(max(scores), 3), ")")
 
 # --- Step 11: Profile the clusters of the best k on the ORIGINAL (unscaled) columns ---
 df["Cluster"] = all_labels[best_k]
-cols = ["BALANCE", "PURCHASES", "CASH_ADVANCE", "CREDIT_LIMIT", "PAYMENTS", "PRC_FULL_PAYMENT"]
+cols = ["BALANCE", "PURCHASES", "CASH_ADVANCE",
+        "CREDIT_LIMIT", "PAYMENTS", "PRC_FULL_PAYMENT"]
 profile = df.groupby("Cluster")[cols].mean().round(2)
 profile.insert(0, "Size", df["Cluster"].value_counts().sort_index())
 print(f"\nCluster profile for k = {best_k} (size and mean of original columns):")
 print(profile.to_string())
 
-# Describe each cluster in words by comparing its means with the average of all customers.
+# Describe each cluster in words by comparing its means with the average of all.
 overall = df[cols].mean()
 print("\nWhat each cluster looks like (compared with the average customer):")
 for c, row in profile.iterrows():
-    buys = "high purchases" if row["PURCHASES"] > overall["PURCHASES"] else "low purchases"
-    cash = "uses cash advances a lot" if row["CASH_ADVANCE"] > overall["CASH_ADVANCE"] else "few cash advances"
-    pay = "pays in full more than average" if row["PRC_FULL_PAYMENT"] > overall["PRC_FULL_PAYMENT"] else "pays in full less than average"
+    if row["PURCHASES"] > overall["PURCHASES"]:
+        buys = "high purchases"
+    else:
+        buys = "low purchases"
+    if row["CASH_ADVANCE"] > overall["CASH_ADVANCE"]:
+        cash = "uses cash advances a lot"
+    else:
+        cash = "few cash advances"
+    if row["PRC_FULL_PAYMENT"] > overall["PRC_FULL_PAYMENT"]:
+        pay = "pays in full more than average"
+    else:
+        pay = "pays in full less than average"
     print(f"  Cluster {c} ({int(row['Size'])} customers): {buys}, {cash}, {pay}")
 
 # --- Step 12: Compare the four linkage methods (k = best k, on the 2-D PCA data) ---
@@ -233,68 +258,37 @@ EXPECTED OUTPUT (real run, Option A data)
 
 OUTPUT GRAPHS EXPLAINED
 -----------------------
-The script draws THREE figures: Figure 1 the dendrogram (Step 8), Figure 2 the set of five
-scatter plots for k = 2 to 6 (Step 9), Figure 3 the silhouette bar chart (Step 10).
+Three figures: dendrogram (Fig 1), five scatter plots (Fig 2), silhouette bars (Fig 3).
 
 GRAPH 1 : DENDROGRAM (Figure 1, title "Dendrogram (ward, last 30 merges)")
-- What it plots: the merge tree of Agglomerative Clustering (ward) on all 8950 customers, cut off
-  to show only the last 30 merges so it is readable.
-- Axes: x = the clusters (each label in brackets is the number of customers inside that
-  cluster, for example (679)). y = "Merge distance", how far apart two clusters were when they
-  were joined. The x order of the leaves has no meaning.
-- Each U shape is one merge: its two legs are the joined clusters and the height of its top bar
-  is the distance. Low bars = very similar groups joined early; high bars = joined late.
-- How to read it: a long vertical line that no merge crosses means two groups are far apart. To
-  pick k, draw a horizontal line through the longest vertical lines and count the lines it
-  cuts.
-- What OUR result shows: the top merge (blue) is at about 62 and the two big branches (orange on
-  the left, green on the right) join at about 33 and 35. Cutting just below 62 gives 2
-  clusters, which matches the best silhouette (k = 2, score 0.421).
-- If asked: "The longest vertical line is the last merge at about 62, so a cut just below it
-  gives 2 clusters, and the silhouette score confirms k = 2."
-- Common misreading: the left-to-right order of leaves means nothing (a branch can be swapped
-  without changing the tree), and closeness along the x axis does not mean similarity; only the
-  height of the join matters. The brackets are customer counts, not cluster numbers.
+- Plots: the merge tree of ward clustering, cut to the last 30 merges so it stays readable.
+- x = clusters; a number in brackets is how many customers are inside, for example (679).
+- y = "Merge distance": how far apart two clusters were when they joined.
+- Each U shape is one merge. Its top bar is the distance; low = joined early, high = late.
+- Pick k by cutting across the longest vertical lines that no merge crosses; count lines cut.
+- OUR result: the last merge is at about 62, so a cut just below it gives k = 2.
+- If asked: "The longest vertical line is the last merge; cutting under it gives 2 clusters."
+- Misreading: the left-to-right order of leaves means nothing; only the join height counts.
 
-GRAPH 2 : SCATTER PLOTS FOR k = 2, 3, 4, 5, 6 (Figure 2, a grid of 5 plots, the 6th box is empty)
-- What it plots: the same 8950 customers drawn 5 times, once per k, coloured by the cluster that
-  AgglomerativeClustering(n_clusters=k) gave them.
-- Axes: x = P1 and y = P2, the two PCA components (they keep 0.474 of the information). Each
-  dot is one customer; the colour is the cluster; colours are only labels, they do not rank.
-- How to read the set together: go from k = 2 to k = 6 and watch the big groups split. With
-  k = 2 there is one split (a left and a right half), and each next k cuts one existing group
-  into two, like going down the dendrogram. It is the same tree cut at different heights.
-- What OUR result shows: the cloud is one round blob with no clear gap, so the clusters are
-  neighbouring slices of it and the boundaries touch. That is why silhouette is only
-  0.421 for k = 2 and falls to 0.345 at k = 6.
-- If asked: "Each plot is the same data cut at a different level of the dendrogram; the
-  clusters touch each other, so the structure is weak and a small k is preferred."
-- Common misreading: a colour in one plot is not the same cluster as that colour in another
-  plot (colours are re-assigned for every k). Also the plot is a 2-D view that keeps only
-  47.4 % of the information, so clusters that look touching may be better separated in the
-  full 17 columns.
+GRAPH 2 : SCATTER PLOTS FOR k = 2 TO 6 (Figure 2, grid of 5 plots, the 6th box is empty)
+- Plots: the same 8950 customers drawn 5 times, coloured by the cluster for each k.
+- x = P1 and y = P2, the two PCA components. One dot is one customer.
+- Colours are only labels for groups; they do not rank or score anything.
+- Read the set together: from k = 2 to 6 each plot splits one group of the plot before it.
+- It is the same tree cut at lower and lower heights, so the groups are nested.
+- OUR result: one round cloud with no gap, so groups touch (silhouette 0.421 to 0.345).
+- If asked: "Same data cut at different levels; the groups touch, so a small k is preferred."
+- Misreading: a colour in one plot is not the same cluster in another; PCA keeps only 47.4 %.
 
 GRAPH 3 : SILHOUETTE BAR CHART (Figure 3, title "Silhouette per k")
-- What it plots: one bar per number of clusters k = 2 to 6; the height is the silhouette score
-  of that clustering on the PCA data.
-- Axes: x = "Number of clusters", y = "Silhouette score" (from -1 to +1, higher = clusters that
-  are tight and well separated).
-- How to read it: the tallest bar is the best k. A bar near 0 means clusters overlap; a
-  negative bar means many points sit in the wrong cluster.
-- What OUR result shows: k = 2 -> 0.421 (tallest), k = 3 -> 0.400, k = 4 -> 0.385, k = 5 ->
-  0.356, k = 6 -> 0.345. The bars fall steadily, so best k = 2. All are below 0.5, so the
-  clusters are only moderately separated.
-- If asked: "The silhouette is highest, 0.421, at k = 2, so k = 2 is chosen; it agrees with the
-  dendrogram."
-- Common misreading: the bars look similar in height, but the tallest bar does not mean the
-  clusters are perfect (0.421 is only fair). The bar chart also does not say which customers
-  are in which cluster.
-
-Quick checklist before showing the graph to the examiner
-- Dendrogram: say y = merge distance, x order means nothing, count the lines cut by the line.
-- Scatter set: say all five plots use the same points and the colours are not shared between plots.
-- Silhouette: say the tallest bar is the best k (k = 2, 0.421) and it matches the dendrogram cut.
-- Mention the limits: PCA keeps only 47.4 % of the information and the groups touch each other.
+- Plots: one bar per k from 2 to 6; the height is the silhouette score for that k.
+- x = "Number of clusters", y = "Silhouette score", from -1 to +1.
+- Higher means tight clusters that are well apart; near 0 means they overlap.
+- A negative bar means many points sit in the wrong cluster.
+- Read it by picking the tallest bar as the best k.
+- OUR result: the bars fall from 0.421 at k = 2 to 0.345 at k = 6, so the best k is 2.
+- If asked: "Silhouette is highest at k = 2, so we choose 2; it agrees with the dendrogram."
+- Misreading: the tallest bar is not perfect (0.421 is only fair), and bars show no members.
 
 DETAILED THEORY NOTES
 ---------------------

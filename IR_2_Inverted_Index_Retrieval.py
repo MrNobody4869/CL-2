@@ -3,14 +3,16 @@ Practical 2 : Inverted Index and Retrieval (Boolean + TF-IDF ranked) on BBC News
 ================================================================================
 INSTRUCTIONS
  1. Install:  pip install pandas nltk
-              (the nltk.download lines in Step 1 fetch punkt_tab and stopwords once; internet is
-              needed only the first time)
- 2. Dataset : BBC_News.csv (2225 articles; columns category, text). The first 500 articles are the
-              document collection. Option A fetches it online; Option B reads a local copy.
+              (the nltk.download lines in Step 1 fetch punkt_tab and stopwords once;
+              internet is needed only the first time)
+ 2. Dataset : BBC_News.csv (2225 articles; columns category, text). The first 500
+              articles are the document collection. Option A fetches it online;
+              Option B reads a local copy.
  3. Run     : python IR_2_Inverted_Index_Retrieval.py
- 4. Steps   : load 500 docs -> preprocess (lower, tokenize, stop words, stem) -> build inverted
-              index -> save/load inverted file -> index statistics -> Boolean retrieval (AND/OR/NOT) -> TF-IDF ranked
-              retrieval -> compare inverted index lookup with linear scan
+ 4. Steps   : load 500 docs -> preprocess (lower, tokenize, stop words, stem) ->
+              build inverted index -> save/load inverted file -> index statistics ->
+              Boolean retrieval (AND/OR/NOT) -> TF-IDF ranked retrieval ->
+              compare inverted index lookup with linear scan
 """
 
 # --- Step 1: Import the libraries and download the NLTK data (one time) ---
@@ -46,13 +48,21 @@ stemmer = PorterStemmer()
 
 def preprocess(text):
     tokens = word_tokenize(text.lower())
-    tokens = [t for t in tokens if re.fullmatch(r"[a-z]+", t) and t not in stop_words]
-    return [stemmer.stem(t) for t in tokens]
+    kept = []
+    for t in tokens:
+        if re.fullmatch(r"[a-z]+", t) and t not in stop_words:
+            kept.append(t)
+    stems = []
+    for t in kept:
+        stems.append(stemmer.stem(t))
+    return stems
 
-print("Example:", preprocess("The markets were falling and investors are selling shares"))
+example = "The markets were falling and investors are selling shares"
+print("Example:", preprocess(example))
 
 # --- Step 4: Build the inverted index ---
-# index = {term: {doc_id: term frequency}}; also store each document's length for the scan test.
+# index = {term: {doc_id: term frequency}}
+# also store each document's length for the scan test.
 index = {}
 doc_terms = {}
 for doc_id, text in df.text.items():
@@ -63,14 +73,22 @@ for doc_id, text in df.text.items():
             index[term] = {}
         index[term][doc_id] = index[term].get(doc_id, 0) + 1
 
-# --- Step 4b: Save the index to a file (this file IS the "inverted file") and load it back ---
-# JSON keys must be strings, so doc ids are saved as "22" and turned back into int(22) when loading.
+# --- Step 4b: Save the index to a file and load it back ---
+# This file IS the "inverted file".
+# JSON keys must be strings, so doc ids are saved as "22"
+# and turned back into int(22) when loading.
 with open("inverted_index.json", "w") as f:
     json.dump(index, f)
 with open("inverted_index.json") as f:
     saved = json.load(f)
-loaded = {t: {int(d): tf for d, tf in p.items()} for t, p in saved.items()}
-print("Inverted file saved to inverted_index.json; loaded copy equals the built index:", loaded == index)
+loaded = {}
+for term, postings in saved.items():
+    loaded[term] = {}
+    for d, tf in postings.items():
+        loaded[term][int(d)] = tf
+same_index = loaded == index
+print("Inverted file saved to inverted_index.json;", end=" ")
+print("loaded copy equals the built index:", same_index)
 assert loaded == index
 index = loaded             # all queries below use the index loaded from the file
 
@@ -78,7 +96,8 @@ index = loaded             # all queries below use the index loaded from the fil
 # Vocabulary size, total postings and a sample posting list.
 print("\nVocabulary size (unique terms):", len(index))
 print("Total postings (term-document pairs):", sum(len(p) for p in index.values()))
-print("Posting list of 'footbal' (doc_id: tf), first 8:", list(index["footbal"].items())[:8])
+first8 = list(index["footbal"].items())[:8]
+print("Posting list of 'footbal' (doc_id: tf), first 8:", first8)
 print("Document frequency (df) of some terms:")
 for t in ["market", "footbal", "mobil", "phone", "game", "govern"]:
     print("  %-8s df = %d" % (t, len(index.get(t, {}))))
@@ -96,15 +115,18 @@ def show(ids, limit=5):
 # Demo input: hand-typed Boolean queries.
 print("\nBOOLEAN: 'stock AND market'")
 r = docs_with("stock") & docs_with("market")
-print("  matches:", len(r)); show(r)
+print("  matches:", len(r))
+show(r)
 
 print("\nBOOLEAN: 'football OR rugby'")
 r = docs_with("football") | docs_with("rugby")
-print("  matches:", len(r)); show(r, 3)
+print("  matches:", len(r))
+show(r, 3)
 
 print("\nBOOLEAN: 'mobile AND phone AND NOT game'")
 r = (docs_with("mobile") & docs_with("phone")) - docs_with("game")
-print("  matches:", len(r)); show(r)
+print("  matches:", len(r))
+show(r)
 
 # --- Step 7: Ranked retrieval with TF-IDF ---
 # score(doc) = sum over query terms of tf * log(N / df); highest score first.
@@ -115,13 +137,16 @@ def search(query, top=5):
             idf = math.log(N / len(index[term]))
             for doc_id, tf in index[term].items():
                 scores[doc_id] = scores.get(doc_id, 0) + tf * idf
-    return sorted(scores.items(), key=lambda x: x[1], reverse=True)[:top]
+    ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return ranked[:top]
 
 # Demo input: hand-typed ranked queries.
 for q in ["stock market", "football match", "mobile phone"]:
     print("\nRANKED QUERY:", q, "->", preprocess(q))
     for doc_id, score in search(q):
-        print("   doc %3d  score %6.2f  [%s] %s" % (doc_id, score, df.category[doc_id], df.text[doc_id][:100]))
+        category = df.category[doc_id]
+        snippet = df.text[doc_id][:100]
+        print("   doc %3d  score %6.2f  [%s] %s" % (doc_id, score, category, snippet))
 
 # --- Step 8: Inverted index lookup vs linear scan ---
 # Linear scan reads every document; the index reads only the posting list of the term.
@@ -134,7 +159,8 @@ for doc_id, terms in doc_terms.items():
         found_linear.add(doc_id)
 posting = index[term]
 print("\nQuery term '%s'" % term)
-print("Linear scan : documents scanned =", scanned_linear, "| matches =", len(found_linear))
+print("Linear scan : documents scanned =", scanned_linear, end=" ")
+print("| matches =", len(found_linear))
 print("Index lookup: documents touched =", len(posting), "| matches =", len(posting))
 print("Same result :", found_linear == set(posting.keys()))
 
@@ -225,74 +251,47 @@ EXPECTED OUTPUT (real run, Option A data: BBC_News.csv, first 500 articles)
 
 OUTPUT EXPLAINED (printed tables, no graph)
 -------------------------------------------
-This script draws no graph. Its result is the printed text. How to read each block:
+No graph is drawn. Four printed blocks:
 
 A. INDEX STATISTICS AND POSTING LIST
-   - "Vocabulary size (unique terms): 9699" = the number of different stems in the 500 articles.
-     It is also the number of keys of the inverted index.
-   - "Total postings: 68693" = the number of (term, document) pairs, so the size of all posting
-     lists together. It is smaller than the total word count, because a word that repeats
-     in one document is stored once with its count.
-   - Posting list of 'footbal': [(22, 1), (27, 1), (32, 1), (45, 1), (46, 4), ...]. Each pair
-     is (document id, term frequency). Read: footbal is in doc 22 once, and in doc 46 four times.
-   - Document frequency (df) lines: market 105, footbal 27, mobil 21, phone 30, game 110,
-     govern 116. Each number = how many of the 500 documents contain the term. Common words
-     (govern, game) have large df; rarer words (mobil, footbal) have small df.
-   - If asked: "A posting list is the list of documents that contain a term, with the count of
-     the term in each document. df is the length of that list."
-   - Common misreading: the numbers in the pairs are doc ids and counts, not scores. Terms are
-     stems, so "footbal" is not a typing mistake.
+   - What it shows: the size of the inverted index and one example posting list.
+   - Vocabulary = number of different stems (keys). Total postings = (term, doc) pairs.
+   - A posting pair is (document id, term frequency). df = length of the list.
+   - Read: (46, 4) means "footbal" is in doc 46 four times.
+   - Common words have a big df (govern, game); rarer words a small df (mobil, footbal).
+   - Our result: vocabulary 9699, postings 68693; df: footbal 27, market 105, govern 116.
+   - If asked: "A posting list = the documents that contain a term, with its count in each."
+   - Common misreading: pair numbers are doc id and count, not scores; footbal is a stem.
 
 B. BOOLEAN QUERY RESULTS
-   - Each query prints "matches: n" and up to 5 documents (id, [category], first 100 characters).
-   - stock AND market : 21 matches (docs 12, 15, 36, 49, 52 shown). AND = documents that contain
-     BOTH words (set intersection).
-   - football OR rugby : 42 matches. OR = documents that contain EITHER word (set union), so it
-     is at least as large as the football list alone (27 documents).
-   - mobile AND phone AND NOT game : 11 matches. NOT removes every document that has the word
-     game.
-   - How to read: Boolean retrieval gives a plain yes/no list, with NO ranking. The documents
-     are simply printed by increasing id.
-   - If asked: "AND is intersection, OR is union and NOT is difference of the posting lists."
-   - Common misreading: the first document shown is not the best match; a Boolean answer has no
-     order of quality. Also doc 36 (a tech article about gamers) matches stock AND market
-     because it contains both words, even though it is not about the stock market.
+   - What it shows: documents matched by each query (up to 5: id, [category], 100 characters).
+   - Each query prints "matches: n" and then the documents.
+   - AND = both words (intersection), OR = either word (union), NOT = remove (difference).
+   - Read: a plain yes/no list with no ranking; documents come in increasing id order.
+   - OR is at least as big as each single word list (footbal alone is 27).
+   - Our result: stock AND market 21, football OR rugby 42, mobile AND phone AND NOT game 11.
+   - If asked: "AND is intersection, OR is union and NOT is difference of posting lists."
+   - Common misreading: the first document shown is not the best match; there is no order.
 
 C. TF-IDF RANKED TABLE
-   - Each line: doc id, score, [category] and the start of the text, best score first.
-   - Score = sum over query words of tf x log(N / df). tf = count of the word in the document;
-     log(N / df) is large for rare words and small for common words.
-   - "stock market": top doc 52 (score 28.11, business), then 193, 393, 186, 357. All five are
-     business articles, so the ranking agrees with the topic.
-   - "football match": top doc 46 (18.47), then 77, 90, 289, 73. Mostly sport.
-   - "mobile phone": top doc 340 (78.14, tech), then 351, 24, 366, 462. All tech. Scores are
-     higher here because the words are rarer (larger log part) and repeated often.
-   - How to read: a higher score = more and rarer query words in the document. Compare scores
-     only inside the SAME query, not between different queries.
-   - If asked: "TF-IDF ranks a document higher when it has the query words many times (tf) and
-     when those words are rare in the collection (idf)."
-   - Common misreading: the top hit for "football match" is a politics article (doc 46, about
-     soccer fans). Ranking is by words, not by the category label. Also doc 351 ranks 2nd for
-     "mobile phone" although its title is about game consoles: raw tf has no length
-     normalisation, so a long document that repeats the words wins.
+   - What it shows: top 5 documents per query, best score first (id, score, [category], text).
+   - Score = sum over query words of tf x log(N / df).
+   - tf = count of the word in the document; log(N / df) is big for rare words.
+   - Read: higher score = more and rarer query words. Compare scores only inside one query.
+   - Our result: top docs: 52 (28.11), 46 (18.47), 340 (78.14) for the three queries.
+   - If asked: "TF-IDF ranks high a document with the query words often, and rare in the data."
+   - Common misreading: ranking follows words, not category (doc 46 is a politics article).
+   - Raw tf has no length normalisation, so a long document repeating the words can win.
 
 D. INDEX LOOKUP VERSUS LINEAR SCAN
-   - Output: "Linear scan : documents scanned = 500 | matches = 27" and "Index lookup: documents
-     touched = 27 | matches = 27", then "Same result : True".
-   - Meaning: the linear scan had to open all 500 documents to find the word footbal. The index
-     went straight to its posting list and touched only the 27 documents that really contain it.
-   - "Same result : True" proves that both ways found exactly the same documents, so the index
-     is faster without losing any answer.
-   - If asked: "The inverted index avoids reading documents that do not contain the word: 27
-     lookups instead of 500 scans here, and the gap grows with a bigger collection."
-   - Common misreading: this counts documents touched, not seconds. It is a simple fair measure
-     of work. The index also cost time to build once, and that cost is paid before any query.
-
-Quick checklist before showing the output to the examiner
-   - Explain one posting list pair: (doc id, term frequency).
-   - Say the Boolean result has no ranking, while the TF-IDF table is ordered by score.
-   - Say AND = intersection, OR = union, NOT = difference, and where tf x log(N/df) comes from.
-   - Quote the final comparison: 500 scanned versus 27 touched, same result True.
+   - What it shows: the work done to find "footbal" by two methods.
+   - Linear scan = open every document. Index lookup = go straight to the posting list.
+   - "Same result : True" means both ways found exactly the same documents.
+   - Read: fewer documents touched = less work, with no answer lost.
+   - Our result: scan 500 docs, 27 matches; index 27 docs, 27 matches; Same result True.
+   - If asked: "The index skips documents without the word: 27 lookups instead of 500 scans."
+   - Common misreading: this counts documents, not seconds.
+   - The index took time to build once, before any query.
 
 DETAILED THEORY NOTES
 ---------------------

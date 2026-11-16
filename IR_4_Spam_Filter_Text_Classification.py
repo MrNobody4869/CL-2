@@ -3,14 +3,16 @@ Practical IR-4 : E-mail Spam Filtering using Text Classification (TF-IDF + Naive
 =======================================================================================
 INSTRUCTIONS
  1. Install:  pip install numpy pandas matplotlib scikit-learn nltk
- 2. Dataset : Enron_Spam_5000.csv (5000 real Enron e-mails, a sample of the Enron-Spam corpus:
-              Category = ham/spam, Message = text). Option A reads it online from the datasets
-              repo; Option B reads a local copy - see the two options in Step 2.
+ 2. Dataset : Enron_Spam_5000.csv (5000 real Enron e-mails, a sample of the
+              Enron-Spam corpus: Category = ham/spam, Message = text). Option A
+              reads it online from the datasets repo; Option B reads a local copy
+              - see the two options in Step 2.
  3. Run     : python IR_4_Spam_Filter_Text_Classification.py
  4. Steps   : load -> clean (missing rows, duplicates) -> map ham/spam to 0/1
               -> stop words + Porter stemming -> 80/20 split
-              -> TF-IDF (fit on train only) -> Multinomial Naive Bayes -> accuracy, precision, recall,
-              F1, confusion matrix -> top spam words -> compare Logistic Regression and KNN
+              -> TF-IDF (fit on train only) -> Multinomial Naive Bayes -> accuracy,
+              precision, recall, F1, confusion matrix -> top spam words
+              -> compare Logistic Regression and KNN
               -> predict 4 demo e-mails
 """
 
@@ -38,7 +40,7 @@ df = pd.read_csv(url)
 print("Data shape:", df.shape)
 
 # --- Step 3: Clean the data and check class balance ---
-# Drop missing rows and exact duplicate rows (this sample has none, so both counts are 0).
+# Drop missing rows and exact duplicate rows (this sample has none, so both are 0).
 before = len(df)
 df = df.dropna()
 print("Missing rows removed:", before - len(df))
@@ -46,18 +48,28 @@ before = len(df)
 df = df.drop_duplicates()
 print("Exact duplicate rows removed:", before - len(df))
 print("Rows left:", len(df))
-print(df["Category"].value_counts())   # shows the class balance (this sample is nearly balanced)
+# shows the class balance (this sample is nearly balanced)
+print(df["Category"].value_counts())
 
 # --- Step 4: Map the labels to numbers ---
 # ham = 0, spam = 1 (spam is the "positive" class we want to catch).
 df["label"] = df["Category"].map({"ham": 0, "spam": 1})
 
 # --- Step 4b: Remove stop words and apply Porter stemming (as the manual asks) ---
-# clean() works on one e-mail at a time and learns nothing from the data, so doing it before the
-# split causes no data leakage. Stemming cuts word endings: "winning", "wins" -> "win".
+# clean() works on one e-mail at a time and learns nothing from the data, so doing
+# it before the split causes no data leakage.
+# Stemming cuts word endings: "winning", "wins" -> "win".
 stemmer = PorterStemmer()
+
+
 def clean(t):
-    return " ".join(stemmer.stem(w) for w in t.lower().split() if w not in ENGLISH_STOP_WORDS)
+    kept = []
+    for w in t.lower().split():
+        if w not in ENGLISH_STOP_WORDS:
+            kept.append(stemmer.stem(w))
+    return " ".join(kept)
+
+
 df["Message"] = df["Message"].apply(clean)
 
 # --- Step 5: Train / test split (80 / 20, same spam ratio in both) ---
@@ -65,10 +77,13 @@ X_train, X_test, y_train, y_test = train_test_split(
     df["Message"], df["label"], test_size=0.2, random_state=42, stratify=df["label"])
 print("Train:", len(X_train), "| Test:", len(X_test))
 
-# --- Step 6: Turn text into TF-IDF numbers (fit on TRAIN only to avoid data leakage) ---
-tfidf = TfidfVectorizer()   # stop words are already removed and words stemmed by clean()
-X_train_vec = tfidf.fit_transform(X_train)   # learn the vocabulary + IDF from train, then transform
-X_test_vec = tfidf.transform(X_test)         # test only transformed, never fitted
+# --- Step 6: Turn text into TF-IDF numbers (fit on TRAIN only: no data leakage) ---
+# stop words are already removed and words stemmed by clean()
+tfidf = TfidfVectorizer()
+# learn the vocabulary + IDF from train, then transform
+X_train_vec = tfidf.fit_transform(X_train)
+# test only transformed, never fitted
+X_test_vec = tfidf.transform(X_test)
 print("Vocabulary size:", len(tfidf.vocabulary_))
 
 # --- Step 7: Train the main classifier - Multinomial Naive Bayes ---
@@ -87,19 +102,26 @@ print(classification_report(y_test, y_pred, target_names=["ham", "spam"]))
 cm = confusion_matrix(y_test, y_pred)
 print("Confusion matrix [[TN FP] [FN TP]]:\n", cm)
 tn, fp, fn, tp = cm.ravel()
-print("Specificity:", round(tn / (tn + fp), 4))   # share of real ham that is correctly left alone
+# share of real ham that is correctly left alone
+print("Specificity:", round(tn / (tn + fp), 4))
 plt.imshow(cm, cmap="Blues")
 plt.colorbar()
 for i in range(2):
     for j in range(2):
         plt.text(j, i, cm[i, j], ha="center", va="center", fontsize=14)
-plt.xticks([0, 1], ["ham", "spam"]); plt.yticks([0, 1], ["ham", "spam"])
-plt.xlabel("Predicted"); plt.ylabel("Actual"); plt.title("Naive Bayes - confusion matrix"); plt.show()
+plt.xticks([0, 1], ["ham", "spam"])
+plt.yticks([0, 1], ["ham", "spam"])
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.title("Naive Bayes - confusion matrix")
+plt.show()
 
 # --- Step 10: Top 10 words that point to spam and to ham ---
 # log P(word | spam) - log P(word | ham): the bigger, the more spammy the word.
-# Note: "escapenumber" is a placeholder the dataset authors put in place of every number, not a real word.
-# It is common in both classes (a little more in ham), so it is NOT among the top spam words.
+# Note: "escapenumber" is a placeholder the dataset authors put in place of every
+# number, not a real word.
+# It is common in both classes (a little more in ham), so it is NOT among the top
+# spam words.
 words = np.array(tfidf.get_feature_names_out())
 score = nb.feature_log_prob_[1] - nb.feature_log_prob_[0]
 print("\nTop 10 spam words:", list(words[np.argsort(score)[::-1][:10]]))
@@ -107,20 +129,32 @@ print("Top 10 ham words :", list(words[np.argsort(score)[:10]]))
 
 # --- Step 11: Compare with Logistic Regression and KNN (same TF-IDF data) ---
 # KNN is the algorithm named in the manual; cosine distance suits text.
-for name, clf in [("Logistic Regression", LogisticRegression(max_iter=1000)),
-                  ("KNN (k=5, cosine)", KNeighborsClassifier(n_neighbors=5, metric="cosine"))]:
+models = [
+    ("Logistic Regression", LogisticRegression(max_iter=1000)),
+    ("KNN (k=5, cosine)", KNeighborsClassifier(n_neighbors=5, metric="cosine")),
+]
+for name, clf in models:
     p = clf.fit(X_train_vec, y_train).predict(X_test_vec)
     print(name, "-> accuracy", round(accuracy_score(y_test, p), 4),
           "| precision", round(precision_score(y_test, p), 4),
           "| recall", round(recall_score(y_test, p), 4))
 
 # --- Step 12: Predict 4 new e-mails ---
-# Demo input: hand-typed messages in the same plain lowercase style as the data (first 2 spam-like, last 2 normal).
-demo = ["dear friend you have won a free prize claim your cash reward now click the link to buy cheap pills online",
-        "limited offer save escapenumber percent on software and watches order now money back guarantee no prescription needed",
-        "hi john please find attached the gas volumes for the meeting on monday let me know if the schedule works for you",
-        "the project team will review the contract draft tomorrow morning please send your comments to the team before the call"]
-probs = nb.predict_proba(tfidf.transform([clean(t) for t in demo]))[:, 1]   # demo e-mails get the same clean()
+# Demo input: hand-typed messages in the same plain lowercase style as the data
+# (first 2 spam-like, last 2 normal).
+demo = [
+    "dear friend you have won a free prize claim your cash reward now "
+    "click the link to buy cheap pills online",
+    "limited offer save escapenumber percent on software and watches "
+    "order now money back guarantee no prescription needed",
+    "hi john please find attached the gas volumes for the meeting on monday "
+    "let me know if the schedule works for you",
+    "the project team will review the contract draft tomorrow morning "
+    "please send your comments to the team before the call",
+]
+# demo e-mails get the same clean()
+cleaned_demo = [clean(t) for t in demo]
+probs = nb.predict_proba(tfidf.transform(cleaned_demo))[:, 1]
 for text, pr in zip(demo, probs):
     print(("SPAM" if pr > 0.5 else "HAM "), round(pr, 3), "|", text)
 
@@ -224,40 +258,18 @@ EXPECTED OUTPUT (real run, Option A data, seed 42)
 
 OUTPUT GRAPHS EXPLAINED
 -----------------------
-The script draws ONE figure: the confusion-matrix heatmap (Figure 1, Step 9). There are no other
-plots (the top spam words, the comparison with Logistic Regression and KNN, and the demo e-mails
-are printed as text only).
+One figure only: the confusion-matrix heatmap (Figure 1, Step 9). Everything else is text.
 
-GRAPH 1 : CONFUSION MATRIX HEATMAP (Figure 1, title "Naive Bayes - confusion matrix")
-- What it plots: a 2 x 2 table of how the 1000 test e-mails were classified by Naive Bayes,
-  drawn as coloured cells with the count written inside each cell.
-- Axes: the vertical axis (Actual) is the TRUE label, ham on the top row and spam on the bottom
-  row. The horizontal axis (Predicted) is the model's answer, ham on the left, spam on the right.
-- Colour: the Blues colour bar on the right maps count to shade. Dark blue = many e-mails, almost
-  white = very few.
-- How to read it: the diagonal (top-left, bottom-right) is correct answers, the off-diagonal
-  cells are mistakes. Top-right = false positive (ham sent to spam). Bottom-left = false
-  negative (spam that got into the inbox).
-- What OUR result shows: top-left 505 (ham kept as ham, TN), top-right 4 (ham wrongly called
-  spam, FP), bottom-left 30 (spam missed, FN), bottom-right 461 (spam caught, TP). So
-  accuracy = (505 + 461) / 1000 = 0.966, precision for spam = 461 / 465 = 0.9914, recall =
-  461 / 491 = 0.9389, specificity = 505 / 509 = 0.9921.
-- The two dark cells are on the diagonal and the two pale cells are the mistakes; the bottom-left
-  cell (30) is the bigger mistake, so the filter is very careful (only 4 good e-mails lost) but
-  lets some spam through.
-- If asked: "Rows are the true class and columns the predicted class; 505 and 461 are correct, 4
-  good mails were blocked and 30 spam mails got through, so precision is high and recall is a
-  little lower."
-- Common misreading: rows are the TRUE labels and columns the PREDICTED ones (do not swap them).
-  A dark cell is only good on the diagonal; dark off-diagonal cells would be bad. The shade
-  depends on the counts, so compare the numbers, not only the colours. The 4 in the top-right
-  is the costly error for a spam filter because it hides a real e-mail.
-
-Quick checklist before showing the graph to the examiner
-- Say first: rows = Actual, columns = Predicted, order ham then spam.
-- Show the diagonal (505, 461) as correct and name the two error cells (4 FP, 30 FN).
-- Quote accuracy 0.966, precision 0.9914, recall 0.9389 and link each to a cell.
-- Be ready for: which error is worse for spam (FP) and why precision matters.
+GRAPH 1 : CONFUSION MATRIX HEATMAP (title "Naive Bayes - confusion matrix")
+- Plots: a 2 x 2 table of how the 1000 test e-mails were classified, with a count in each cell.
+- Rows (Actual) are the TRUE label, ham on top and spam below. Columns are what the model said.
+- Colour (Blues bar): dark blue = many e-mails, almost white = very few.
+- The diagonal (top-left, bottom-right) is correct; the other two cells are mistakes.
+- Top-right = false positive (good mail sent to spam).
+- Bottom-left = false negative (spam missed).
+- OUR result: 505 ham kept, 4 ham blocked, 30 spam missed, 461 spam caught; accuracy 0.966.
+- If asked: "Rows are the true class, columns the predicted class; few good mails are lost."
+- Misreading: rows are TRUE labels, columns PREDICTED, do not swap them.
 
 DETAILED THEORY NOTES
 ---------------------

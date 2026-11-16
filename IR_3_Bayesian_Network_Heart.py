@@ -3,14 +3,17 @@ Practical IR-3 : Bayesian Network for Heart Disease Diagnosis (pgmpy)
 =====================================================================
 INSTRUCTIONS
  1. Install:  pip install numpy pandas matplotlib scikit-learn pgmpy==1.1.2 networkx
-              (1.1.2 is the tested version; the DiscreteBayesianEstimator import path is version specific)
- 2. Dataset : heart.csv (the manual's Cleveland heart disease file: 1025 rows but only 302 unique, 13
-              features + target 0/1 where 1 = NO disease in this file). Option A reads it online from the
-              datasets repo; Option B reads a local copy - see the two options in Step 2.
+              (1.1.2 is the tested version; the DiscreteBayesianEstimator import
+              path is version specific)
+ 2. Dataset : heart.csv (the manual's Cleveland heart disease file: 1025 rows but
+              only 302 unique, 13 features + target 0/1 where 1 = NO disease in
+              this file). Option A reads it online from the datasets repo;
+              Option B reads a local copy - see the two options in Step 2.
  3. Run     : python IR_3_Bayesian_Network_Heart.py
- 4. Steps   : load -> discretise numeric columns -> 80/20 split -> define network (DAG) -> learn CPDs
-              -> check model -> inference with Variable Elimination (3 demo patients)
-              -> test-set accuracy + confusion matrix -> draw the network
+ 4. Steps   : load -> discretise numeric columns -> 80/20 split -> define network
+              (DAG) -> learn CPDs -> check model -> inference with Variable
+              Elimination (3 demo patients) -> test-set accuracy + confusion
+              matrix -> draw the network
 """
 
 # --- Step 1: Import the libraries ---
@@ -18,7 +21,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score
+from sklearn.metrics import accuracy_score, confusion_matrix
+from sklearn.metrics import precision_score, recall_score
 from pgmpy.models import DiscreteBayesianNetwork
 from pgmpy.parameter_estimator import DiscreteBayesianEstimator
 from pgmpy.inference import VariableElimination
@@ -34,30 +38,36 @@ df = pd.read_csv(url)
 print("Data shape:", df.shape)
 print("Missing values:", int(df.isna().sum().sum()))
 
-# The file repeats the same patients about 3.4 times. Identical rows would land in both train and
-# test (leakage) and inflate the accuracy, so keep each unique patient once.
+# The file repeats the same patients about 3.4 times. Identical rows would land in
+# both train and test (leakage) and inflate the accuracy, so keep each patient once.
 rows_before = len(df)
 df = df.drop_duplicates()
 print("Rows before / after drop_duplicates:", rows_before, "->", len(df))
 
-# In this file target = 1 means NO disease (inverted). Flip it so condition = 1 means disease.
+# In this file target = 1 means NO disease (inverted). Flip it so 1 means disease.
 df["condition"] = 1 - df["target"]
 df = df.drop(columns="target")
-print(df["condition"].value_counts().rename({0: "0 = healthy", 1: "1 = heart disease"}))
+counts = df["condition"].value_counts()
+print(counts.rename({0: "0 = healthy", 1: "1 = heart disease"}))
 
-# Evidence for the flip: the disease group should have lower max heart rate and more exercise angina.
+# Evidence for the flip: the disease group has lower max heart rate, more angina.
 print(df.groupby("condition")[["thalach", "exang"]].mean().round(2))
 
 # --- Step 3: Discretise the continuous columns into 3 bins each ---
-# pgmpy tables need few states, so age, trestbps, chol, thalach become low/mid/high (equal-size bins).
+# pgmpy tables need few states, so age, trestbps, chol, thalach become low/mid/high.
+# (equal-size bins)
 for col in ["age", "trestbps", "chol", "thalach"]:
     df[col] = pd.qcut(df[col], 3, labels=["low", "mid", "high"]).astype(str)
 # oldpeak has many zeros, so qcut fails; use fixed cut points instead.
-df["oldpeak"] = pd.cut(df["oldpeak"], [-0.1, 0.5, 2.0, 10], labels=["low", "mid", "high"]).astype(str)
+cut_points = [-0.1, 0.5, 2.0, 10]
+df["oldpeak"] = pd.cut(df["oldpeak"], cut_points, labels=["low", "mid", "high"])
+df["oldpeak"] = df["oldpeak"].astype(str)
 print(df.head(3))
 
 # --- Step 4: Train / test split (80 / 20, keep the same disease ratio in both) ---
-train, test = train_test_split(df, test_size=0.2, random_state=42, stratify=df["condition"])
+train, test = train_test_split(
+    df, test_size=0.2, random_state=42, stratify=df["condition"]
+)
 print("Train rows:", len(train), "| Test rows:", len(test))
 
 # --- Step 5: Define the network structure (the DAG) ---
@@ -70,10 +80,16 @@ edges = [("age", "condition"), ("sex", "condition"), ("chol", "condition"),
 model = DiscreteBayesianNetwork(edges)
 
 # --- Step 6: Learn the CPDs from the training data ---
-# DiscreteBayesianEstimator (BDeu prior) adds small pseudo-counts so no probability is exactly 0.
-# state_names lists every possible value of each column, so unseen values never crash later.
-state_names = {c: sorted(df[c].unique()) for c in df.columns}
-estimator = DiscreteBayesianEstimator(state_names=state_names, prior_type="BDeu", equivalent_sample_size=10)
+# DiscreteBayesianEstimator (BDeu prior) adds small pseudo-counts so no probability
+# is exactly 0.
+# state_names lists every possible value of each column, so unseen values never
+# crash later.
+state_names = {}
+for c in df.columns:
+    state_names[c] = sorted(df[c].unique())
+estimator = DiscreteBayesianEstimator(
+    state_names=state_names, prior_type="BDeu", equivalent_sample_size=10
+)
 model.fit(train, estimator=estimator)
 print("\nCPD of cp (chest pain) given condition:")
 print(model.get_cpds("cp"))
@@ -87,13 +103,15 @@ print("Model valid:", model.check_model())
 # --- Step 8: Inference with Variable Elimination - 3 demo patients ---
 infer = VariableElimination(model)
 # Demo input: hand-typed evidence for three patients (only some facts are known).
-# Codes of THIS file: cp 0 = asymptomatic, 3 = typical angina; thal 3 = reversible defect.
+# Codes of THIS file: cp 0 = asymptomatic, 3 = typical angina; thal 3 = reversible.
 patients = {
     "Patient A (old male, asymptomatic chest pain cp 0, exercise angina)":
         {"age": "high", "sex": 1, "cp": 0, "exang": 1},
-    "Patient B (young female, typical-angina chest pain cp 3, no exercise angina, high max heart rate)":
+    ("Patient B (young female, typical-angina chest pain cp 3, "
+     "no exercise angina, high max heart rate)"):
         {"age": "low", "sex": 0, "cp": 3, "exang": 0, "thalach": "high"},
-    "Patient C (middle age male, 2 blocked vessels, thal 3 = reversible defect, high ST depression)":
+    ("Patient C (middle age male, 2 blocked vessels, "
+     "thal 3 = reversible defect, high ST depression)"):
         {"age": "mid", "sex": 1, "ca": 2, "thal": 3, "oldpeak": "high"},
 }
 for name, evidence in patients.items():
@@ -102,8 +120,9 @@ for name, evidence in patients.items():
     print("   P(condition=1 | evidence) =", round(float(q.values[1]), 3))
 
 # --- Step 9: Evaluate on the test set ---
-# For every test row, give all other columns as evidence and pick the likelier condition.
-y_true, y_pred = [], []
+# For every test row, give all other columns as evidence, pick the likelier condition.
+y_true = []
+y_pred = []
 for _, row in test.iterrows():
     evidence = row.drop("condition").to_dict()
     q = infer.query(["condition"], evidence=evidence, show_progress=False)
@@ -115,12 +134,18 @@ print("Recall        :", round(recall_score(y_true, y_pred), 3))
 print("Confusion matrix [[TN FP] [FN TP]]:\n", confusion_matrix(y_true, y_pred))
 
 # --- Step 10: Draw the network graph ---
-# Convert the edge list to a networkx graph. shell_layout puts "condition" in the centre and all
-# other nodes on a circle around it, so every arrow can be read easily.
+# Convert the edge list to a networkx graph. shell_layout puts "condition" in the
+# centre and all other nodes on a circle around it, so every arrow can be read easily.
 g = nx.DiGraph(edges)
-pos = nx.shell_layout(g, nlist=[["condition"], [n for n in g.nodes if n != "condition"]])
-nx.draw(g, pos, with_labels=True, node_color="lightblue", node_size=1800, font_size=8, arrowsize=15)
-plt.title("Bayesian network for heart disease"); plt.show()
+other_nodes = []
+for n in g.nodes:
+    if n != "condition":
+        other_nodes.append(n)
+pos = nx.shell_layout(g, nlist=[["condition"], other_nodes])
+nx.draw(g, pos, with_labels=True, node_color="lightblue",
+        node_size=1800, font_size=8, arrowsize=15)
+plt.title("Bayesian network for heart disease")
+plt.show()
 
 
 
@@ -220,34 +245,17 @@ EXPECTED OUTPUT (real run, Option A data, seed 42)
 
 OUTPUT GRAPHS EXPLAINED
 -----------------------
-The script draws ONE figure: the network graph (Figure 1, Step 10).
+One figure only: the network graph (Figure 1, Step 10).
 
-GRAPH 1 : BAYESIAN NETWORK GRAPH (Figure 1, title "Bayesian network for heart disease")
-- What it plots: the structure (DAG) of the model, not data values. It is the edge list of Step 5.
-- Nodes (light blue circles): one per variable, 14 in total. "condition" sits in the centre; the
-  other 13 sit on a circle around it (shell_layout).
-- Arrows (edges): an arrow A -> B means A is a parent of B, i.e. A directly influences B.
-- Arrows INTO condition (from age, sex, chol, trestbps, fbs): the 5 risk factors. They are the
-  parents of condition, so condition's CPT has 3 x 2 x 3 x 3 x 2 = 108 columns.
-- Arrows OUT of condition (to cp, restecg, thalach, exang, oldpeak, slope, ca, thal): the 8
-  symptoms and test results. Disease is the cause; they are the effects.
-- How to read it: 13 arrows in total (5 in, 8 out). No arrow joins two outer nodes, so given
-  condition the symptoms are independent of each other (fork, d-separation). There is no loop.
-- What OUR result shows: the model passed check_model() (Model valid: True). Using this graph the
-  network gave P(condition=1) = 0.978 for Patient A, 0.02 for Patient B, 0.993 for Patient C, and
-  test accuracy 0.82 (confusion matrix [[28 5] [6 22]]).
-- If asked: "The arrows show cause to effect: risk factors cause disease and disease causes the
-  symptoms; with the CPTs on these nodes we run Variable Elimination backwards from symptoms to
-  the disease."
-- Common misreading: the picture has NO numbers and no axes. Arrow length and node position mean
-  nothing (shell_layout just spreads nodes), and an arrow shows direct influence in the model,
-  not a proven medical cause. The probabilities are in the CPDs, not in the graph.
-
-Quick checklist before showing the graph to the examiner
-- Point to condition in the centre, then show the 5 incoming arrows and the 8 outgoing arrows.
-- Say: nodes = variables, arrows = parent to child, each node has a CPT, and there is no cycle.
-- Be ready for: why is this a DAG, what is d-separation, why are there no numbers on the arrows.
-- Mention the figure is only the structure; the learned numbers are printed as CPDs.
+GRAPH 1 : BAYESIAN NETWORK GRAPH (title "Bayesian network for heart disease")
+- Plots: the structure of the model (the edge list of Step 5), not data values.
+- Nodes (light blue circles): the 14 variables. "condition" is in the centre, 13 around it.
+- Arrow A -> B: A is a parent of B, so A directly influences B. There are no axes.
+- 5 arrows come IN to condition (risk factors) and 8 go OUT (symptoms and test results).
+- Read it as cause to effect: risk factors -> disease -> symptoms. There is no loop.
+- OUR result: model valid (check_model True); P(disease) = 0.978 / 0.02 / 0.993, accuracy 0.82.
+- If asked: "Arrows go from cause to effect, and the CPTs on the nodes let us infer disease."
+- Misreading: position and arrow length mean nothing; the numbers are in the CPDs.
 
 DETAILED THEORY NOTES
 ---------------------

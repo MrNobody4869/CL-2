@@ -22,68 +22,117 @@ from qiskit.quantum_info import Statevector
 from qiskit.visualization import plot_histogram
 
 # --- Step 2: The 3-puzzle (2x2 board), production rules and demo input ---
-# Board = tuple of 4 numbers read row by row: (top-left, top-right, bottom-left, bottom-right); 0 = blank.
+# Board = tuple of 4 numbers read row by row:
+# (top-left, top-right, bottom-left, bottom-right), 0 = blank.
 GOAL = (1, 2, 3, 0)           # DEMO INPUT: goal board
 START = (2, 0, 1, 3)          # DEMO INPUT: start board
 STEPS = 3                     # how many rules we apply one after the other
-BOARDS = list(itertools.permutations(range(4)))   # all 24 boards; the position in this list is the board number (fits in 5 qubits)
+# all 24 boards, the position in this list is the board number (fits in 5 qubits)
+BOARDS = list(itertools.permutations(range(4)))
 
 # Draw a board as two lines of text.
 def show(board):
-    print("   " + " ".join(str(t) if t else "_" for t in board[:2]))
-    print("   " + " ".join(str(t) if t else "_" for t in board[2:]))
+    for row in (board[:2], board[2:]):
+        symbols = []
+        for t in row:
+            if t:
+                symbols.append(str(t))
+            else:
+                symbols.append("_")
+        print("   " + " ".join(symbols))
 
-# Production rule: V swaps the blank with its vertical neighbour, H with its horizontal neighbour.
+# Production rule: V swaps the blank with its vertical neighbour,
+# H swaps it with its horizontal neighbour.
 def apply_rule(board, rule):
     b = list(board)
     i = b.index(0)
-    j = i ^ 2 if rule == "V" else i ^ 1    # on a 2x2 board both neighbours always exist
+    # on a 2x2 board both neighbours always exist
+    if rule == "V":
+        j = i ^ 2
+    else:
+        j = i ^ 1
     b[i], b[j] = b[j], b[i]
     return tuple(b)
 
-print("Start board (demo input):"); show(START)
-print("Goal board (demo input):"); show(GOAL)
+print("Start board (demo input):")
+show(START)
+print("Goal board (demo input):")
+show(GOAL)
 
-# --- Step 3: Write the rule table as a unitary matrix (classical preparation of the gate) ---
-# Gate acts on 6 qubits: 1 rule qubit (lowest) + 5 board qubits. Rule qubit 0 = V, 1 = H.
-# It maps |rule>|board> to |rule>|rule applied to board>. Boards 24..31 do not exist, so they stay unchanged.
+# --- Step 3: Write the rule table as a unitary matrix (classical preparation) ---
+# Gate acts on 6 qubits: 1 rule qubit (lowest) + 5 board qubits.
+# Rule qubit 0 = V, 1 = H.
+# It maps |rule>|board> to |rule>|rule applied to board>.
+# Boards 24..31 do not exist, so they stay unchanged.
 U = np.zeros((64, 64))
 for x in range(64):
     r, b = x & 1, x >> 1
-    nb = BOARDS.index(apply_rule(BOARDS[b], "VH"[r])) if b < 24 else b
-    U[r + 2 * nb, x] = 1                   # one 1 per column: a permutation matrix, so it is unitary
-assert np.allclose(U @ U, np.eye(64))      # every rule undoes itself, so applying it again = uncompute
-RULE = UnitaryGate(U, label="Rule")        # qiskit also checks that U is unitary here
+    if b < 24:
+        new_board = apply_rule(BOARDS[b], "VH"[r])
+        nb = BOARDS.index(new_board)
+    else:
+        nb = b
+    # one 1 per column: a permutation matrix, so it is unitary
+    U[r + 2 * nb, x] = 1
+# every rule undoes itself, so applying it again = uncompute
+assert np.allclose(U @ U, np.eye(64))
+# qiskit also checks that U is unitary here
+RULE = UnitaryGate(U, label="Rule")
 
-# --- Step 4: Count the marked sequences (only to choose the number of Grover iterations) ---
+# --- Step 4: Count the marked sequences (to choose the Grover iterations) ---
 # Grover needs M (how many sequences reach the goal) to pick the iteration count.
-# We find M by trying all 8 sequences classically; the oracle itself does NOT contain the answers.
+# We find M by trying all 8 sequences classically.
+# The oracle itself does NOT contain the answers.
 N = 2 ** STEPS
 def name(k):
-    return "".join("VH"[(k >> s) & 1] for s in range(STEPS))   # number k -> rule sequence, step 1 = lowest bit
+    # number k -> rule sequence, step 1 = lowest bit
+    seq = ""
+    for s in range(STEPS):
+        seq = seq + "VH"[(k >> s) & 1]
+    return seq
 def replay(seq):
     board = START
     for rule in seq:
         board = apply_rule(board, rule)
     return board
-marked = [k for k in range(N) if replay(name(k)) == GOAL]   # also used to read the result (exact probability)
+# also used to read the result (exact probability)
+marked = []
+for k in range(N):
+    if replay(name(k)) == GOAL:
+        marked.append(k)
 M = len(marked)
-assert M > 0, "No sequence of STEPS rules reaches the goal - change STEPS, START or GOAL"
+assert M > 0, (
+    "No sequence of STEPS rules reaches the goal - "
+    "change STEPS, START or GOAL"
+)
 print("\nSequences N =", N, " marked M =", M)
 
 # --- Step 5: Build the oracle: run the rules, test the goal, undo the rules ---
-RQ = [0, 1, 2]                 # rule qubits: one per step (the sequence lives here)
-BQ = [3, 4, 5, 6, 7]           # board register: 5 qubits holding the board number
-goal_no = BOARDS.index(GOAL)   # the goal test compares the board with this number
+# rule qubits: one per step (the sequence lives here)
+RQ = [0, 1, 2]
+# board register: 5 qubits holding the board number
+BQ = [3, 4, 5, 6, 7]
+# the goal test compares the board with this number
+goal_no = BOARDS.index(GOAL)
 
 def oracle():
     qc = QuantumCircuit(8, name="Oracle")
+    # apply the chosen rule of each step to the board
     for s in RQ:
-        qc.append(RULE, [s] + BQ)                                    # apply the chosen rule of each step to the board
-    zeros = [BQ[q] for q in range(5) if not (goal_no >> q) & 1]
-    qc.x(zeros); qc.h(BQ[4]); qc.mcx(BQ[:4], BQ[4]); qc.h(BQ[4]); qc.x(zeros)   # phase flip (-1) if board == GOAL
+        qc.append(RULE, [s] + BQ)
+    zeros = []
+    for q in range(5):
+        if not (goal_no >> q) & 1:
+            zeros.append(BQ[q])
+    # phase flip (-1) if board == GOAL
+    qc.x(zeros)
+    qc.h(BQ[4])
+    qc.mcx(BQ[:4], BQ[4])
+    qc.h(BQ[4])
+    qc.x(zeros)
+    # undo the rules: the board is back to START
     for s in reversed(RQ):
-        qc.append(RULE, [s] + BQ)                                    # undo the rules: the board is back to START
+        qc.append(RULE, [s] + BQ)
     return qc
 
 print("\nOracle circuit (rules, goal test, undo):")
@@ -92,16 +141,25 @@ print(oracle().draw(output="text", fold=100))
 # --- Step 6: Build the diffuser (inversion about the average) on the rule qubits ---
 def diffuser():
     qc = QuantumCircuit(8, name="Diffuser")
-    qc.h(RQ); qc.x(RQ)
-    qc.h(RQ[-1]); qc.mcx(RQ[:-1], RQ[-1]); qc.h(RQ[-1])
-    qc.x(RQ); qc.h(RQ)
+    qc.h(RQ)
+    qc.x(RQ)
+    qc.h(RQ[-1])
+    qc.mcx(RQ[:-1], RQ[-1])
+    qc.h(RQ[-1])
+    qc.x(RQ)
+    qc.h(RQ)
     return qc
 
 # --- Step 7: Grover circuit ---
 iters = math.floor(math.pi / 4 * math.sqrt(N / M))
 grover = QuantumCircuit(8)
-grover.x([BQ[q] for q in range(5) if (BOARDS.index(START) >> q) & 1])   # load the START board into the board register
-grover.h(RQ)                                                           # superposition of all 8 rule sequences
+# load the START board into the board register
+start_no = BOARDS.index(START)
+for q in range(5):
+    if (start_no >> q) & 1:
+        grover.x(BQ[q])
+# superposition of all 8 rule sequences
+grover.h(RQ)
 for _ in range(iters):
     grover.compose(oracle(), inplace=True)
     grover.compose(diffuser(), inplace=True)
@@ -109,7 +167,9 @@ print("Grover iterations:", iters, " (floor(pi/4*sqrt(N/M)))")
 
 # Exact success probability from the state vector, taken on the rule qubits only.
 probs = Statevector(grover).probabilities(RQ)
-exact = sum(probs[k] for k in marked)
+exact = 0
+for k in marked:
+    exact = exact + probs[k]
 print("Exact success probability:", round(exact, 4))
 
 # --- Step 8: Measure the rule qubits on the simulator ---
@@ -117,10 +177,18 @@ qc = QuantumCircuit(8, STEPS)
 qc.compose(grover, inplace=True)
 qc.measure(RQ, range(STEPS))
 sim = AerSimulator(seed_simulator=42)
-counts = sim.run(transpile(qc, sim), shots=1024).result().get_counts()
-named = {name(int(bits, 2)): c for bits, c in counts.items()}
-top = dict(sorted(named.items(), key=lambda kv: -kv[1])[:5])
-hits = sum(c for seq, c in named.items() if replay(seq) == GOAL)
+result = sim.run(transpile(qc, sim), shots=1024).result()
+counts = result.get_counts()
+named = {}
+for bits, c in counts.items():
+    named[name(int(bits, 2))] = c
+# sort the outcomes by shots, biggest first, and keep the top 5
+ranked = sorted(named.items(), key=lambda item: -item[1])
+top = dict(ranked[:5])
+hits = 0
+for seq, c in named.items():
+    if replay(seq) == GOAL:
+        hits = hits + c
 print("\nTop outcomes (rule sequence -> shots):", top)
 print("Measured success:", hits, "/ 1024 =", round(hits / 1024, 4))
 # Draw on our own axes (ax=) so the chart also shows inside Jupyter.
@@ -133,12 +201,17 @@ seq = next(iter(top))
 board = START
 print("\nWinning sequence:", " ".join(seq))
 for i, rule in enumerate(seq, 1):
-    print("Step", i, "- rule", rule, "before:"); show(board)
+    print("Step", i, "- rule", rule, "before:")
+    show(board)
     board = apply_rule(board, rule)
-    print("Step", i, "- rule", rule, "after:"); show(board)
+    print("Step", i, "- rule", rule, "after:")
+    show(board)
 print("Reaches goal:", board == GOAL)
 assert board == GOAL, "Grover result did not solve the puzzle"
-print("\nClassical search: about", (N + 1) / 2, "checks on average for one marked sequence, Grover:", iters, "iterations (N is far too small for a real speed-up)")
+avg_checks = (N + 1) / 2
+print("\nClassical search: about", avg_checks,
+      "checks on average for one marked sequence, Grover:", iters,
+      "iterations (N is far too small for a real speed-up)")
 
 
 
@@ -244,46 +317,26 @@ EXPECTED OUTPUT (real run, local AerSimulator, seed 42)
 
 OUTPUT GRAPHS EXPLAINED (and circuit diagrams for quantum scripts)
 ------------------------------------------------------------------
-A. CIRCUIT DIAGRAM (printed as text, the oracle circuit)
-   - What it is: the oracle on 8 qubits. q_0, q_1, q_2 are the rule qubits (rule of step 1, 2,
-     3; 0 = V, 1 = H). q_3 to q_7 are the 5 board qubits that hold the board number.
-   - Symbols: a tall box named "Rule" is the rule gate (a 64 x 64 unitary matrix). The small
-     numbers inside the box (0 to 5) are the gate's own input wires: wire 0 is the rule qubit
-     that controls it, wires 1 to 5 are the board qubits. [ X ] = NOT. [ H ] = Hadamard. A dot
-     joined to a box [ X ] = controlled X. The dots on q_3, q_4, q_5, q_6 with the [ X ] on q_7
-     (between two H boxes) make a multi-controlled Z.
-   - Reading left to right: (1) three Rule boxes, one per step, run the moves on the board
-     register; (2) in the middle, X boxes on q_4 and q_5 and the H - controlled X - H block
-     flip the sign (phase) only if the board equals the goal; (3) three Rule boxes again in
-     reverse order undo the moves so the board register returns to START.
-   - If asked: "The oracle plays the three moves, marks the state if the goal is reached, then
-     plays the moves backwards to clean up."
-   - Misreading to avoid: the oracle does NOT print the answer or measure anything. It only
-     changes the sign of the winning sequence. Grover turns that sign into a high probability.
+Each item: what it shows, how to read it, our result, a viva answer, a common mistake.
+A. CIRCUIT DIAGRAM (text drawing, the oracle circuit)
+   - Plots: the oracle on 8 qubits. q_0 to q_2 are rule qubits (step 1, 2, 3; 0 = V, 1 = H).
+   - q_3 to q_7 are the 5 board qubits that hold the board number.
+   - "Rule" box = a 64 x 64 gate; its small numbers 0 to 5 are inputs (wire 0 = rule qubit).
+   - [ X ] = NOT; [ H ] = Hadamard; dots on q_3 to q_6 plus [ X ] on q_7 between H = multi-Z.
+   - Read it: three Rule boxes play the moves; the middle flips the sign if board = goal;
+   - then three Rule boxes in reverse undo the moves, so the board register returns to START.
+   - Ours: 8 qubits, six Rule boxes, N = 8 sequences with M = 1 marked.
+   - If asked: "The oracle plays the moves, marks the goal, then undoes the moves."
+   - Misreading: the oracle does not measure or print the answer, it only flips a sign.
 
 B. FIGURE 1 - BAR CHART "Grover over rule sequences (top 5 outcomes)"
-   - What it plots: how many of the 1024 shots gave each rule sequence (top 5 outcomes). Each
-     3-letter label is a sequence of moves: H = horizontal move of the blank, V = vertical move.
-   - Axes: x = rule sequence (HHH, HHV, HVH, VHH, VHV, written rotated); y = "Count" (number
-     of shots, out of 1024).
-   - How to read it: a tall bar is a sequence Grover found likely. One very tall bar and tiny
-     others means the search worked. If the search did nothing, all 8 sequences would get
-     about 128 shots each.
-   - Our result: HVH = 986 shots, the other four bars are 7, 7, 6, 6. Measured success 986 / 1024
-     = 0.9629, exact success probability 0.9453 after 2 Grover iterations.
-   - We then replay H V H on the start board and reach the goal (Reaches goal: True).
-   - If asked: "The tall bar at HVH shows amplitude amplification: the winning sequence went
-     from 1/8 probability to about 95 percent in two Grover iterations."
-   - Misreading to avoid: the picture shows only the top 5 of 8 outcomes, so the bars do not
-     add up to 1024 (the other shots are spread over the wrong sequences). Also with N = 8
-     Grover gives no real speed-up over a classical search, it is a teaching demo.
-
-Quick checklist before showing the graph to the examiner
-   - Title: "Grover over rule sequences (top 5 outcomes)". X label: rule sequence. Y label: count.
-   - No legend (one set of bars).
-   - Point at: the tall HVH bar (986) versus the tiny bars (6 or 7), then at the printed
-     board steps that end at the goal 1 2 / 3 _.
-   - Mention the start 2 _ / 1 3 and the two Grover iterations.
+   - Plots: shots per rule sequence (top 5 of 8). H = blank moves sideways, V = up or down.
+   - x axis: rule sequence (HHH, HHV, HVH, VHH, VHV); y axis: Count (shots out of 1024).
+   - Read it: one very tall bar with tiny others means the search worked.
+   - With no search, all 8 sequences would get about 128 shots each.
+   - Ours: HVH = 986 of 1024 = 0.9629 (exact 0.9453); other bars 7, 7, 6, 6. Replay hits goal.
+   - If asked: "Grover lifted the winner from 1/8 to about 95 percent in 2 iterations."
+   - Misreading: only 5 of 8 bars shown, so they do not sum to 1024; N = 8 gives no speed-up.
 
 DETAILED THEORY NOTES
 ---------------------
@@ -621,14 +674,14 @@ A5. With 1 iteration it is about 0.78 (sin^2(3*20.7 deg)). With 3 it rotates pas
     and falls to about 0.33 (sin^2(7*20.7 deg)). So the right count matters.
 
 Q6. Write the line that runs the circuit on the simulator for 1024 shots.
-A6. counts = sim.run(transpile(qc, sim), shots=1024).result().get_counts()
+A6. result = sim.run(transpile(qc, sim), shots=1024).result() then counts = result.get_counts()
 
 Q7. How do you change the seed and what do you expect?
 A7. AerSimulator(seed_simulator=7). The top outcome stays HVH; only the few stray shots and
     exact counts change.
 
 Q8. How is the multi-controlled Z written in the code?
-A8. qc.h(BQ[4]); qc.mcx(BQ[:4], BQ[4]); qc.h(BQ[4]). H turns the target X into a Z. The X gates
+A8. qc.h(BQ[4]), qc.mcx(BQ[:4], BQ[4]), qc.h(BQ[4]). H turns the target X into a Z. The X gates
     before and after it select the board number of the goal.
 
 Q9. What would happen if you remove the second loop of rule gates in the oracle (no

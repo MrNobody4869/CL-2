@@ -16,36 +16,47 @@ from qiskit import QuantumCircuit, transpile
 from qiskit_aer import AerSimulator
 
 # --- Step 2: Create the circuit with 16 qubits and 16 classical bits ---
-# The manual used IBMQ.enable_account('API token') and provider.get_backend('ibmq_qasm_simulator'); here the local simulator is used instead.
+# The manual used IBMQ.enable_account('API token') and
+# provider.get_backend('ibmq_qasm_simulator').
+# Here the local simulator is used instead.
 n = 16
 qc = QuantumCircuit(n, n)
 
 # --- Step 3: Put every qubit in superposition and measure ---
-# Hadamard turns |0> into an equal mix of 0 and 1; measuring then gives a random bit.
+# Hadamard turns |0> into an equal mix of 0 and 1.
+# Measuring then gives a random bit.
 qc.h(range(n))
 qc.measure(range(n), range(n))
 
 # --- Step 4: Run once (shots=1) to get one random 16-bit number ---
-sim = AerSimulator()                         # no seed, so every run gives a different number
+# no seed, so every run gives a different number
+sim = AerSimulator()
 result = sim.run(transpile(qc, sim), shots=1).result()
-bits = list(result.get_counts())[0]          # e.g. '0110101110010001'
+# e.g. '0110101110010001'
+bits = list(result.get_counts())[0]
 print("Random bitstring :", bits)
 print("Random number    :", int(bits, 2), "(range 0 to 65535)")
 
 # --- Step 5: Draw the circuit as text ---
 print(qc.draw(output="text", fold=120))
 
-# --- Step 6: Generate 1000 random numbers (1000 shots, memory=True keeps every shot) ---
+# --- Step 6: Generate 1000 random numbers (1000 shots, memory=True) ---
 shots = 1000
-sim_fixed = AerSimulator(seed_simulator=42)  # fixed seed only here, so the 1000-number stats are reproducible
-memory = sim_fixed.run(transpile(qc, sim_fixed), shots=shots, memory=True).result().get_memory()
+# fixed seed only here, so the 1000-number stats are reproducible
+sim_fixed = AerSimulator(seed_simulator=42)
+compiled = transpile(qc, sim_fixed)
+result = sim_fixed.run(compiled, shots=shots, memory=True).result()
+memory = result.get_memory()
 numbers = np.array([int(b, 2) for b in memory])
 print("Generated", len(numbers), "numbers, first five:", numbers[:5])
-print("Mean:", round(numbers.mean(), 1), "(ideal 32767.5) | Min:", numbers.min(), "| Max:", numbers.max())
+print("Mean:", round(numbers.mean(), 1), "(ideal 32767.5)", end=" ")
+print("| Min:", numbers.min(), "| Max:", numbers.max())
 
 # --- Step 7: Histogram in 16 bins to check the numbers are spread evenly ---
 plt.hist(numbers, bins=16, range=(0, 65536), edgecolor="k")
-plt.xlabel("Random number (0 to 65535)"); plt.ylabel("Count"); plt.title("1000 numbers from 16 qubits")
+plt.xlabel("Random number (0 to 65535)")
+plt.ylabel("Count")
+plt.title("1000 numbers from 16 qubits")
 plt.show()
 
 
@@ -121,45 +132,26 @@ EXPECTED OUTPUT (real run, AerSimulator; 1000-number check uses seed_simulator=4
 
 OUTPUT GRAPHS EXPLAINED (and circuit diagrams for quantum scripts)
 ------------------------------------------------------------------
-A. CIRCUIT DIAGRAM (printed as text in the console)
-   - What it is: the 16-qubit circuit drawn with characters. Each row q_0 ... q_15 is one qubit
-     wire, time flows left to right. The bottom row "c: 16/" is the 16-bit classical register.
-   - Symbols: the box [ H ] is the Hadamard gate (puts the qubit in a 50/50 superposition of 0
-     and 1). The box [M] is a measurement. The vertical double lines going down from each [M]
-     to the bottom row carry the result into the classical register; the number under each
-     line (0 to 15) is the classical bit that receives the result of that qubit.
-   - How to read it: every wire has the same two boxes, H then M, so all 16 qubits are
-     randomised and measured. No gate connects two wires, so the qubits are independent.
-   - Our result: in the sample run the bit string 0111000001011101 gives the number 28765
-     (this single number is different on every run because it is unseeded).
-   - If asked: "H on all 16 qubits makes 2^16 = 65536 equally likely outcomes, measuring picks
-     one of them, and that is our random number."
-   - Misreading to avoid: the diagonal staircase of M boxes is only drawing layout. The qubits
-     are not measured in a chain, and each measurement is separate.
+Each item: what it shows, how to read it, our result, a viva answer, a common mistake.
+A. CIRCUIT DIAGRAM (text drawing in the console)
+   - Plots: the 16-qubit circuit. Rows q_0 to q_15 are qubits; time runs left to right.
+   - The bottom row "c: 16/" is the 16-bit classical register that stores the results.
+   - [ H ] = Hadamard gate: puts a qubit in a 50/50 mix of 0 and 1.
+   - [M] = measurement; its double line goes to classical bit 0 to 15 (the small number).
+   - Read it: every wire is H then M; no gate joins wires, so qubits are independent.
+   - Ours: bitstring 1001010000011111 = number 37919 (unseeded, so it changes every run).
+   - If asked: "H on 16 qubits gives 2^16 = 65536 equal outcomes; we measure one."
+   - Misreading: the staircase of M boxes is only layout, not a chain.
 
 B. FIGURE 1 - HISTOGRAM "1000 numbers from 16 qubits"
-   - What it plots: how the 1000 random numbers we generated are spread over the range 0 to
-     65535, grouped into 16 equal bins (bars).
-   - Axes: x = "Random number (0 to 65535)" (the integer value of each 16-bit result); y =
-     "Count" (how many of the 1000 numbers fall in that bin). Each bin is about 4096 wide.
-   - How to read it: a tall bar means many numbers landed in that range, a short bar means few.
-     For a fair random generator all 16 bars should be about the same height.
-   - Our result: bar heights run from about 50 to 78 (for example 53, 68, 70, 70 on the left
-     and 78 near 28000). The ideal is 1000/16 = 62.5 per bar. Mean = 32522.0 against ideal
-     32767.5, min 87, max 65515.
-   - The small ups and downs are normal chance (shot noise). There is no trend, no gap and no
-     empty bin, so the numbers are spread flat (uniform) over the whole range.
-   - If asked: "The bars are roughly equal in height, so every number from 0 to 65535 is about
-     equally likely, which is what Hadamard on every qubit should give."
-   - Misreading to avoid: the bars are NOT expected to be exactly equal and the shape is NOT a
-     bell curve. Do not say uneven bars mean the generator is broken. Also this is only
-     pseudo-random on a simulator, real hardware gives true randomness.
-
-Quick checklist before showing the graph to the examiner
-   - Title: "1000 numbers from 16 qubits". X label: random number 0 to 65535. Y label: count.
-   - There is no legend because there is only one data set (one colour of bars).
-   - Point at: the 16 bars of nearly equal height, then say the mean is near 32768.
-   - Keep the circuit text in the console open and point at one H box and one M box.
+   - Plots: how our 1000 random numbers spread over 0 to 65535, in 16 equal bins (bars).
+   - x axis: the random number (0 to 65535); each bin is 4096 wide.
+   - y axis: Count = how many of the 1000 numbers fall in that bin. No legend (one data set).
+   - Read it: a tall bar means many numbers in that range; a fair generator gives similar bars.
+   - The ideal bar is 1000/16 = 62.5, so small ups and downs are just chance.
+   - Ours: bars about 50 to 78; mean 32522.0 (ideal 32767.5), min 87, max 65515.
+   - If asked: "Bars are about equal, so every number is equally likely."
+   - Misreading: bars need not be exactly equal and the shape is not a bell curve.
 
 DETAILED THEORY NOTES
 ---------------------

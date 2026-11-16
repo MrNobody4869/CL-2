@@ -3,10 +3,12 @@ Practical 2 : Quantum Teleportation (3 qubits)
 ==============================================
 INSTRUCTIONS
  1. Install:  pip install qiskit qiskit-aer matplotlib
- 2. Dataset : None needed. Everything runs on qiskit's local AerSimulator (no IBM account/token).
+ 2. Dataset : None needed. Everything runs on qiskit's local AerSimulator
+              (no IBM account/token).
  3. Run     : python QAI_4_Quantum_Teleportation.py
- 4. Steps   : prepare message on q0 -> Bell pair q1,q2 -> Bell measurement on q0,q1 -> correct q2
-              -> measure -> test 1: teleport |1> -> test 2: teleport an arbitrary state
+ 4. Steps   : prepare message on q0 -> Bell pair q1,q2 -> Bell measurement on q0,q1
+              -> correct q2 -> measure -> test 1: teleport |1>
+              -> test 2: teleport an arbitrary state
 """
 
 # --- Step 1: Import the libraries ---
@@ -21,14 +23,18 @@ sim = AerSimulator(seed_simulator=42)
 # q0 = message (Alice), q1 = Alice's half of the Bell pair, q2 = Bob's half.
 def teleport_circuit(prepare, undo=None):
     qc = QuantumCircuit(3, 3)
-    # message on q0, Bell pair q1-q2, Alice's basis change, Bob's corrections (deferred form), optional undo
+    # message on q0, Bell pair q1-q2, Alice's basis change, Bob's corrections
+    # then an optional undo step
     prepare(qc)
     qc.barrier()
-    qc.h(1); qc.cx(1, 2)
+    qc.h(1)
+    qc.cx(1, 2)
     qc.barrier()
-    qc.cx(0, 1); qc.h(0)
+    qc.cx(0, 1)
+    qc.h(0)
     qc.barrier()
-    qc.cx(1, 2); qc.cz(0, 2)        # X if q1=1, Z if q0=1
+    qc.cx(1, 2)                     # X if q1=1
+    qc.cz(0, 2)                     # Z if q0=1
     qc.barrier()
     if undo is not None:
         undo(qc)                    # test 2 only
@@ -40,14 +46,16 @@ qc1 = teleport_circuit(prepare=lambda qc: qc.x(0))
 print(qc1.draw(output="text"))
 
 # --- Step 4: Run 1024 shots and look at the counts ---
-counts1 = sim.run(transpile(qc1, sim), shots=1024).result().get_counts()
+job1 = sim.run(transpile(qc1, sim), shots=1024)
+counts1 = job1.result().get_counts()
 print("Test 1 counts (bits are q2 q1 q0):", counts1)
 # Bob's qubit q2 is the leftmost bit; count how often it is 1.
 bob1 = sum(c for bits, c in counts1.items() if bits[0] == "1")
 print("Bob measured 1 in", bob1, "of 1024 shots")
 
 # --- Step 5: Test 2 - teleport an arbitrary state made by ry(theta) and rz(phi) ---
-theta, phi = 1.1, 0.7           # demo input angles
+theta = 1.1                     # demo input angles
+phi = 0.7
 def prepare(qc):
     qc.ry(theta, 0)
     qc.rz(phi, 0)
@@ -57,15 +65,18 @@ def undo(qc):                       # inverse of prepare, in reverse order, on q
     qc.ry(-theta, 2)
 
 qc2 = teleport_circuit(prepare, undo)
-counts2 = sim.run(transpile(qc2, sim), shots=1024).result().get_counts()
+job2 = sim.run(transpile(qc2, sim), shots=1024)
+counts2 = job2.result().get_counts()
 print("Test 2 counts (bits are q2 q1 q0):", counts2)
 bob2 = sum(c for bits, c in counts2.items() if bits[0] == "0")
-print("After undoing the preparation Bob measured 0 in", bob2, "of 1024 shots (0 means the state arrived)")
+print("After undoing the preparation Bob measured 0 in", bob2, "of 1024 shots", end=" ")
+print("(0 means the state arrived)")
 
 # --- Step 6: Plot both histograms ---
 # Draw on our own axes (ax=) so the chart also shows inside Jupyter.
 fig, ax = plt.subplots(figsize=(8, 4))
-plot_histogram([counts1, counts2], legend=["Test 1: teleport |1>", "Test 2: arbitrary state"], ax=ax)
+labels = ["Test 1: teleport |1>", "Test 2: arbitrary state"]
+plot_histogram([counts1, counts2], legend=labels, ax=ax)
 plt.show()
 
 
@@ -146,49 +157,27 @@ EXPECTED OUTPUT (real run, AerSimulator, seed_simulator=42)
 
 OUTPUT GRAPHS EXPLAINED (and circuit diagrams)
 ----------------------------------------------
-A. CIRCUIT DIAGRAM (printed as text by qc1.draw, Test 1)
-   - What it is: the teleportation circuit drawn with characters. Time runs from left to right.
-   - Lines: q_0, q_1, q_2 are the three qubit wires. The bottom double line "c: 3/" is the
-     classical register with 3 bits (c0, c1, c2).
-   - Boxes: [X] = bit flip, [H] = Hadamard (makes superposition). A filled dot joined by a
-     vertical line to a box [X] on another wire = CX (CNOT): the dot is the control, the box is
-     the target. Two filled dots joined by a line = CZ (phase flip on q2 if q0 is 1). The
-     vertical line simply passes over q_1 in the cz; it does not touch it.
-   - Dashed vertical lines (barrier) only separate the stages; they do not change the logic.
-   - [M] = measurement. The double vertical line and the number under it (0, 1, 2) show which
-     classical bit receives that result.
-   - Read left to right: X on q_0 (message |1>) | H and CX make the Bell pair on q_1,q_2 | CX
-     and H on q_0 (Alice's Bell measurement) | CX and CZ on q_2 (Bob's corrections) | measure.
-   - If asked: "The circuit has 3 qubits; the first block makes the message, the second block
-     makes the entangled pair, the third block is Alice's measurement basis and the fourth block
-     is Bob's correction."
-   - Common misreading: a dot with no joined box is only one half of a controlled gate, not a
-     gate on its own. Also q_0 is the TOP wire but the LAST (rightmost) bit in the counts.
+Two outputs: the circuit drawing and one histogram.
 
-B. FIGURE 1 - histogram of both tests (one plot with two coloured series)
-   - What it plots: how many times each 3-bit result appeared in 1024 shots, for Test 1 (blue
-     bars, teleport |1>) and Test 2 (orange bars, arbitrary state + undo).
-   - X axis: the bit string "q2 q1 q0" (leftmost bit is Bob's qubit q2). Y axis: Count (number
-     of shots). The number above each bar is its exact count. The legend is at the top right.
-   - How to read it: a tall bar means that result happened often. Here every bar is about the
-     same height (about 256 = 1024/4), so the results are evenly spread over 4 outcomes.
-   - Our result: blue bars sit only on 100, 101, 110, 111 with counts 234, 276, 256, 258. All
-     four start with 1, so Bob's q2 was 1 in 1024 of 1024 shots. Orange bars sit only on 000,
-     001, 010, 011 with counts 257, 269, 264, 234. All start with 0, so Bob's q2 was 0 in 1024
-     of 1024 shots after the undo.
-   - The two right bits (q1, q0) are random because Alice's measurement result is random. That
-     is expected and does not matter, because Bob's correction already fixed his qubit.
-   - If asked: "The left bit never changes: it is always 1 in Test 1 and always 0 in Test 2, so
-     the state of q0 reached q2. The other two bits are random, as they should be."
-   - Common misreading: do not say the blue and orange bars are "different results". The four
-     bars of each colour all prove the same thing: the leftmost bit is fixed. Also do not
-     expect one single tall bar; four equal bars is the correct picture.
+A. CIRCUIT DIAGRAM (text drawing of Test 1)
+   - What it shows: the teleportation circuit as text; time runs from left to right.
+   - Wires: q_0 = message, q_1 and q_2 = Bell pair; "c: 3/" = the 3 classical bits.
+   - Symbols: [X] flip, [H] Hadamard, dot + box = CX, two dots = CZ, [M] measure.
+   - Dashed barrier lines only separate the stages; they change nothing.
+   - Read in blocks: message | Bell pair | Alice's CX and H | Bob's CX and CZ | measure.
+   - Our result: X on q0, H and CX, CX and H on q0, CX and CZ on q2, 3 measurements.
+   - If asked: "Block 1 is the message, 2 the entangled pair, 3 Alice measures, 4 Bob fixes."
+   - Common misreading: a lone dot is half of a gate; q_0 is the top wire, LAST count bit.
 
-Quick checklist before showing the graph to the examiner
-   - Say which bit is which: leftmost = q2 (Bob), rightmost = q0 (Alice's message).
-   - Point out that Test 1 bars all start with 1 and Test 2 bars all start with 0.
-   - Say why four bars appear: q0 and q1 are random, only q2 is fixed.
-   - Be ready to name the gates in the circuit: X, H, CX, CZ and the measurement.
+B. FIGURE 1 - histogram of both tests (blue = Test 1, orange = Test 2)
+   - What it plots: how often each 3-bit result came up in 1024 shots, for both tests.
+   - X axis: bit string "q2 q1 q0" (left bit = Bob's q2). Y axis: Count of shots.
+   - The number above each bar is its exact count; the legend is at the top right.
+   - Tall bar = common result. Four equal bars (about 256 each) = even spread.
+   - Check only the LEFT bit: all blue bars start with 1, all orange bars start with 0.
+   - Our result: Bob measured 1 in 1024 of 1024 shots (Test 1), 0 in 1024 of 1024 (Test 2).
+   - If asked: "The left bit never changes, so q0's state reached q2; the rest is random."
+   - Common misreading: four bars per colour is correct; one single tall bar is not expected.
 
 DETAILED THEORY NOTES
 ---------------------
@@ -428,7 +417,7 @@ Q1. Change the code to teleport |0> instead of |1>. What do you edit?
 A1. Remove the X gate: prepare=lambda qc: None. Then q2 should always read 0 in test 1.
 
 Q2. Write the line that creates the Bell pair between q1 and q2.
-A2. qc.h(1); qc.cx(1, 2)
+A2. qc.h(1) and then qc.cx(1, 2)
 
 Q3. What happens if you remove the CZ correction?
 A3. Test 1 still looks fine because |1> has no phase problem, but test 2 fails: q2 reads 1 in

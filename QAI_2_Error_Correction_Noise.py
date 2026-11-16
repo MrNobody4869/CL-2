@@ -22,7 +22,7 @@ SHOTS = 4000
 SEED = 42
 
 # --- Step 2: Build a noise model that flips a qubit (X error) with probability p ---
-# The error is attached to the identity gate 'id', so we choose exactly where the noise acts.
+# The error is attached to the identity gate 'id', so we choose where the noise acts.
 def bitflip_noise(p):
     nm = NoiseModel()
     nm.add_all_qubit_quantum_error(pauli_error([("X", p), ("I", 1 - p)]), ["id"])
@@ -41,23 +41,39 @@ def unprotected_circuit():
 # q0,q1,q2 = data qubits, q3,q4 = ancilla (syndrome) qubits.
 def protected_circuit():
     qc = QuantumCircuit(5, 1)
-    # encode |1> -> |111>, noisy channel (id), syndromes s1 = q0^q1 and s2 = q1^q2, corrections, read q0
+    # encode |1> -> |111>, noisy channel (id), syndromes s1 = q0^q1 and s2 = q1^q2,
+    # corrections, read q0
     qc.x(0)
-    qc.cx(0, 1); qc.cx(0, 2)
-    qc.id(0); qc.id(1); qc.id(2)
-    qc.cx(0, 3); qc.cx(1, 3)
-    qc.cx(1, 4); qc.cx(2, 4)
-    qc.ccx(3, 4, 1)                      # s1=1,s2=1 -> flip q1
-    qc.x(4); qc.ccx(3, 4, 0); qc.x(4)    # s1=1,s2=0 -> flip q0
-    qc.x(3); qc.ccx(3, 4, 2); qc.x(3)    # s1=0,s2=1 -> flip q2
+    qc.cx(0, 1)
+    qc.cx(0, 2)
+    qc.id(0)
+    qc.id(1)
+    qc.id(2)
+    qc.cx(0, 3)
+    qc.cx(1, 3)
+    qc.cx(1, 4)
+    qc.cx(2, 4)
+    # s1=1,s2=1 -> flip q1
+    qc.ccx(3, 4, 1)
+    # s1=1,s2=0 -> flip q0
+    qc.x(4)
+    qc.ccx(3, 4, 0)
+    qc.x(4)
+    # s1=0,s2=1 -> flip q2
+    qc.x(3)
+    qc.ccx(3, 4, 2)
+    qc.x(3)
     qc.measure(0, 0)
     return qc
 
-# --- Step 5: Helper that runs a circuit with noise p and returns the logical error rate ---
+# --- Step 5: Helper that runs a circuit with noise p and gives the error rate ---
 def logical_error_rate(qc, p):
     sim = AerSimulator(noise_model=bitflip_noise(p))
-    counts = sim.run(transpile(qc, sim, optimization_level=0), shots=SHOTS, seed_simulator=SEED).result().get_counts()
-    return counts.get("0", 0) / SHOTS     # we encoded 1, so every '0' is an error
+    compiled = transpile(qc, sim, optimization_level=0)
+    result = sim.run(compiled, shots=SHOTS, seed_simulator=SEED).result()
+    counts = result.get_counts()
+    # we encoded 1, so every '0' is an error
+    return counts.get("0", 0) / SHOTS
 
 print(protected_circuit().draw("text"))
 
@@ -65,7 +81,8 @@ print(protected_circuit().draw("text"))
 ps = [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.45, 0.5]
 unprot = [logical_error_rate(unprotected_circuit(), p) for p in ps]
 prot = [logical_error_rate(protected_circuit(), p) for p in ps]
-theory = [3 * p**2 - 2 * p**3 for p in ps]      # >=2 of 3 qubits flipped
+# >=2 of 3 qubits flipped
+theory = [3 * p**2 - 2 * p**3 for p in ps]
 print("\n    p   unprotected  protected  theory 3p^2-2p^3")
 for p, u, c, t in zip(ps, unprot, prot, theory):
     print(f"{p:5.2f}   {u:9.4f}  {c:9.4f}  {t:9.4f}")
@@ -74,8 +91,12 @@ for p, u, c, t in zip(ps, unprot, prot, theory):
 plt.plot(ps, unprot, "ro-", label="Unprotected")
 plt.plot(ps, prot, "bs-", label="3-qubit code (simulated)")
 plt.plot(ps, theory, "g--", label="Theory 3p^2 - 2p^3")
-plt.xlabel("Physical error probability p"); plt.ylabel("Logical error rate")
-plt.title("Bit-flip repetition code"); plt.legend(); plt.grid(True); plt.show()
+plt.xlabel("Physical error probability p")
+plt.ylabel("Logical error rate")
+plt.title("Bit-flip repetition code")
+plt.legend()
+plt.grid(True)
+plt.show()
 
 # --- Step 8: Measurement (readout) error demo, as in the manual ---
 # Noise model: reading 0 gives 1 with prob 0.05, reading 1 gives 0 with prob 0.10.
@@ -85,34 +106,49 @@ sim = AerSimulator(noise_model=ro)
 
 # The manual's circuit: 3-qubit GHZ state (ideal result: 000 and 111, 50% each).
 ghz = QuantumCircuit(3, 3)
-ghz.h(0); ghz.cx(0, 1); ghz.cx(0, 2)
+ghz.h(0)
+ghz.cx(0, 1)
+ghz.cx(0, 2)
 ghz.measure([0, 1, 2], [0, 1, 2])
-counts = sim.run(transpile(ghz, sim), shots=SHOTS, seed_simulator=SEED).result().get_counts()
+result = sim.run(transpile(ghz, sim), shots=SHOTS, seed_simulator=SEED).result()
+counts = result.get_counts()
 print("\nOriginal counts:", dict(sorted(counts.items())))
 
-# --- Step 9: Calibration matrix: prepare each of the 8 basis states and see what is measured ---
-M = np.zeros((8, 8))                      # M[measured, prepared]
+# --- Step 9: Calibration matrix: prepare each of the 8 basis states, measure ---
+# M[measured, prepared]
+M = np.zeros((8, 8))
 for prepared in range(8):
     cal = QuantumCircuit(3, 3)
     for k in range(3):
         if (prepared >> k) & 1:
             cal.x(k)
     cal.measure([0, 1, 2], [0, 1, 2])
-    c = sim.run(transpile(cal, sim), shots=SHOTS, seed_simulator=SEED).result().get_counts()
+    result = sim.run(transpile(cal, sim), shots=SHOTS, seed_simulator=SEED).result()
+    c = result.get_counts()
     for key, n in c.items():
         M[int(key, 2), prepared] = n / SHOTS
 
-# --- Step 10: Mitigate: solve M * true = measured, then clip negatives and renormalise ---
-measured = np.array([counts.get(format(i, "03b"), 0) for i in range(8)]) / SHOTS
+# --- Step 10: Mitigate: solve M * true = measured, clip negatives, renormalise ---
+measured = np.zeros(8)
+for i in range(8):
+    measured[i] = counts.get(format(i, "03b"), 0) / SHOTS
 true = np.clip(np.linalg.solve(M, measured), 0, None)
 true = true / true.sum()
-mitigated = {format(i, "03b"): float(true[i]) for i in range(8)}
-print("Mitigated probabilities:", {k: round(v, 3) for k, v in mitigated.items() if v > 0.001})
+mitigated = {}
+for i in range(8):
+    mitigated[format(i, "03b")] = float(true[i])
+shown = {}
+for key, value in mitigated.items():
+    if value > 0.001:
+        shown[key] = round(value, 3)
+print("Mitigated probabilities:", shown)
 print("P(000)+P(111) original :", round(measured[0] + measured[7], 3))
 print("P(000)+P(111) mitigated:", round(true[0] + true[7], 3))
 
 # --- Step 11: Histogram of original vs mitigated ---
-orig_prob = {k: v / SHOTS for k, v in counts.items()}
+orig_prob = {}
+for key, value in counts.items():
+    orig_prob[key] = value / SHOTS
 plot_histogram([orig_prob, mitigated], legend=["Original", "Mitigated"])
 plt.show()
 
@@ -211,66 +247,36 @@ EXPECTED OUTPUT (real run, shots = 4000, seed_simulator = 42)
 
 OUTPUT GRAPHS EXPLAINED (and circuit diagrams for quantum scripts)
 ------------------------------------------------------------------
-A. CIRCUIT DIAGRAM (printed as text, the 5-qubit repetition code)
-   - What it is: the protected circuit. q_0, q_1, q_2 are the three data qubits, q_3 and q_4
-     are the two ancilla (syndrome) qubits. The last row "c: 1/" is one classical bit.
-   - Symbols: [ X ] = bit flip (NOT). A dot joined by a vertical line to a box [ X ] on another
-     wire = CNOT (the dot is the control, the box is the target). Two dots joined to one [ X ]
-     = Toffoli (ccx), it flips the target only if BOTH controls are 1. [ I ] = identity gate,
-     it does nothing in theory but it is the place where our noise (X error with probability p)
-     acts. [M] = measurement of q_0 into the classical bit.
-   - Reading left to right: (1) X on q_0 makes |1>; (2) two CNOTs from q_0 copy it to q_1 and q_2
-     (|111>); (3) three [ I ] boxes = the noisy channel on each data qubit; (4) four CNOTs into
-     q_3 and q_4 compute the two parity checks (the syndrome); (5) three Toffoli gates (with X
-     boxes around one control to test for 0) flip back the qubit the syndrome points at;
-     (6) measure q_0.
-   - If asked: "The ancilla qubits tell us WHICH qubit flipped without measuring the data, and
-     the Toffoli gates flip it back."
-   - Misreading to avoid: the [ I ] boxes are not errors by themselves, they are just markers
-     where the noise model is attached.
+Each item: what it shows, how to read it, our result, a viva answer, a common mistake.
+A. CIRCUIT DIAGRAM (text drawing, the 5-qubit repetition code)
+   - Plots: q_0 to q_2 are data qubits, q_3, q_4 are ancilla (check) qubits; "c: 1/" = 1 bit.
+   - Symbols: [ X ] = NOT; dot joined to [ X ] = CNOT; two dots joined to [ X ] = Toffoli.
+   - [ I ] does nothing; it only marks where noise (X error, probability p) is attached.
+   - [M] = measure q_0 into the classical bit.
+   - Read it: X on q_0, two CNOTs copy it to |111>, then three [ I ] noise boxes hit the data.
+   - Then 4 CNOTs write the parity checks (syndrome) to q_3, q_4; 3 Toffolis fix the flip.
+   - Ours: this circuit gives logical error 0.0238 at p = 0.10 (see Figure 1).
+   - If asked: "The ancillas show WHICH qubit flipped; Toffoli flips it back."
+   - Misreading: [ I ] boxes are not errors by themselves, only noise markers.
 
 B. FIGURE 1 - LINE PLOT "Bit-flip repetition code"
-   - What it plots: logical error rate (how often we read the wrong bit) against the physical
-     error probability p, for three curves.
-   - Axes: x = "Physical error probability p" (0.01 to 0.5); y = "Logical error rate" (a
-     fraction from 0 to 0.5, no units). Legend: red circles = Unprotected, blue squares =
-     3-qubit code (simulated), green dashed = Theory 3p^2 - 2p^3.
-   - How to read it: a curve BELOW another is better (fewer errors). The red line is almost a
-     straight line (error rate = p). The blue line bends below it, so the code helps. Where
-     the lines meet, the code stops helping.
-   - Our result: at p = 0.10 unprotected 0.0932, protected 0.0238 (theory 0.0280). At p = 0.01
-     unprotected 0.0107, protected 0.0008. At p = 0.30: 0.2928 vs 0.2175. At p = 0.50 both
-     are about 0.5 (0.4955 and 0.5040), so the lines meet.
-   - The blue (simulated) line sits on the green dashed theory line, which confirms the maths.
-   - If asked: "Protected is better than unprotected for every p below 0.5 because the code only
-     fails when two or more qubits flip, which has probability 3p^2 - 2p^3, smaller than p."
-   - Misreading to avoid: the code is NOT perfect and does not remove errors completely. At
-     p = 0.5 it gives no gain. The tiny gap between blue and green is sampling noise (4000
-     shots), not a mistake.
+   - Plots: logical error rate (how often we read the wrong bit) against physical error p.
+   - x axis: physical error probability p (0.01 to 0.5); y axis: logical error rate (0 to 0.5).
+   - Legend: red circles = unprotected; blue squares = 3-qubit code run; green dashed = theory.
+   - Read it: a lower curve means fewer errors. The red line is straight (error = p).
+   - Blue bends below red, so the code helps; where the curves meet, it stops helping.
+   - Ours: at p = 0.10, unprotected 0.0932 vs protected 0.0238; both near 0.5 at p = 0.50.
+   - If asked: "It fails only if 2 or more qubits flip: 3p^2 - 2p^3, below p for p < 0.5."
+   - Misreading: the code is not perfect; the small blue-green gap is shot noise.
 
 C. FIGURE 2 - HISTOGRAM "Original vs Mitigated" (readout error demo)
-   - What it plots: results of the 3-qubit GHZ circuit with a noisy readout, before (Original)
-     and after (Mitigated) fixing the readout error with the calibration matrix.
-   - Axes: x = the 3-bit outcomes 000, 001, ... 111 (written rotated); y = "Quasi-probability"
-     (fraction of shots; the numbers on top of the bars are the exact values). Legend: blue =
-     Original, orange = Mitigated.
-   - How to read it: a perfect GHZ circuit has only two tall bars, 000 and 111, about 0.5 each,
-     and all other bars empty. Any bar on the other six outcomes is an error.
-   - Our result: Original has 000 = 0.423 and 111 = 0.375 plus many small bars of 0.02 to 0.04.
-     Mitigated has 000 = 0.488 and 111 = 0.505 and the small bars almost vanish (0.001 to 0.003).
-     P(000)+P(111) rises from 0.798 to 0.993.
-   - If asked: "Readout mitigation measures how the device misreads each basis state, builds
-     a matrix, and inverts it, so the tall bars grow back and the wrong bars shrink."
-   - Misreading to avoid: this fixes only measurement errors, not gate errors or bit flips in
-     the circuit. Some mitigated bars (like 010, 101, 110) are missing because they were
-     clipped to zero, this is not a bug.
-
-Quick checklist before showing the graph to the examiner
-   - Figure 1: title "Bit-flip repetition code", x = physical error probability p, y = logical
-     error rate, legend with three curves. Point at red above blue at p = 0.1, and the meeting
-     at p = 0.5.
-   - Figure 2: legend Original / Mitigated, y = quasi-probability. Point at the two tall bars
-     000 and 111 and the small wrong bars that shrink.
+   - Plots: 3-qubit GHZ results with noisy readout, before (Original) and after (Mitigated).
+   - x axis: 3-bit outcomes 000 to 111; y axis: quasi-probability (fraction of shots).
+   - Legend: blue = Original, orange = Mitigated. Numbers on the bars are the exact values.
+   - Read it: perfect GHZ = two tall bars, 000 and 111, near 0.5 each; other bars are errors.
+   - Ours: P(000)+P(111) rises from 0.798 to 0.993; the stray bars shrink to 0.001 to 0.003.
+   - If asked: "We measure how the device misreads each state in a matrix, then invert it."
+   - Misreading: it fixes only readout errors, not gate errors; missing bars were clipped to 0.
 
 DETAILED THEORY NOTES
 ---------------------
@@ -544,7 +550,7 @@ A9. Use QuantumCircuit(2, 2), measure [0, 1], build a 4x4 matrix (range(4), form
     range(2) for the X loop) and use 4 instead of 8 in the np.zeros, loops and solve.
 
 Q10. Which lines make the syndrome bit s1 and which make s2?
-A10. s1: qc.cx(0, 3); qc.cx(1, 3). s2: qc.cx(1, 4); qc.cx(2, 4).
+A10. s1: qc.cx(0, 3), qc.cx(1, 3). s2: qc.cx(1, 4), qc.cx(2, 4).
 
 Q11. How do you plot only the protected curve and the theory curve?
 A11. Delete the plt.plot line for unprot (or comment it) and keep the other two plt.plot calls.
